@@ -33,9 +33,11 @@ Sin build ni dependencias: es un sitio estático. Se puede servir con GitHub Pag
 
 ## Probar en modo demo
 
-Abrí `index.html` en el navegador (o `npx serve .`). Con `config.js` vacío arranca con datos de ejemplo y un selector **Ver como** para recorrer los cuatro roles.
+Abrí `index.html?demo` en el navegador (o `npx serve .` y entrá a `/?demo`). En modo demo arranca con datos de ejemplo y un selector **Ver como** para recorrer los cuatro roles.
 
-## Conectar a Supabase
+## Supabase
+
+Proyecto de producción: `fggqqrbldsdtumyqehny` (región São Paulo), ya configurado en `config.js`. Para montar otro desde cero:
 
 1. Crear un proyecto en [supabase.com](https://supabase.com).
 2. En **SQL Editor**, ejecutar `supabase/schema.sql` y después `supabase/seed.sql`.

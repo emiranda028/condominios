@@ -5,7 +5,7 @@
 -- del usuario en la propiedad y dejan registro en el historial.
 -- ============================================================
 
-create extension if not exists pgcrypto;
+-- gen_random_uuid() viene incluido en Postgres 13+
 
 create type rol_usuario    as enum ('vecino', 'administracion', 'propietario');
 create type estado_reclamo as enum ('nuevo', 'presupuestando', 'aprobacion', 'en_curso', 'resuelto', 'desestimado');
@@ -181,7 +181,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 create or replace function pesos(n numeric) returns text
-language sql immutable as $$
+language sql immutable set search_path = public as $$
   select '$ ' || replace(to_char(n, 'FM999,999,999,990'), ',', '.')
 $$;
 
@@ -234,6 +234,8 @@ begin
   on conflict (id) do nothing;
   return new;
 end $$;
+
+revoke execute on function crear_perfil() from public, anon, authenticated;
 
 create trigger al_registrarse after insert on auth.users
   for each row execute function crear_perfil();
@@ -617,3 +619,21 @@ create policy "ofertas visibles"      on compra_ofertas       for select to auth
 
 -- Cambios en vivo
 alter publication supabase_realtime add table eventos, avisos, compras, compra_ofertas;
+
+-- ---------- Permisos: solo usuarios con sesión llaman a las funciones ----------
+revoke execute on all functions in schema public from public, anon;
+alter default privileges in schema public revoke execute on functions from public, anon;
+
+grant execute on function
+  mi_rol(uuid), mi_nombre(), pesos(numeric),
+  crear_reclamo(uuid, text, text, text, text, urgencia), pedir_presupuestos(bigint),
+  cargar_presupuesto(bigint, text, numeric, int, text), aprobar_presupuesto(uuid),
+  desestimar_presupuesto(uuid, text), desestimar_reclamo(bigint, text), resolver_reclamo(bigint),
+  reabrir_reclamo(bigint), enviar_nota(bigint), comentar(bigint, text),
+  registrar_proveedor(text, text, text[], text[], text, text, text), oportunidades(),
+  cotizar(bigint, numeric, int, text), marcar_avisos_leidos(),
+  crear_compra(text, text, text, numeric, date, text, text, text), sumarse_compra(bigint, numeric, text),
+  ofertar_compra(bigint, jsonb, text), cerrar_compra(bigint), compras_resumen()
+to authenticated;
+
+revoke execute on function _log(bigint, text), _exigir(bigint, rol_usuario[]), _avisar_proveedores(bigint), crear_perfil() from authenticated;
