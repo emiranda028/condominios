@@ -43,7 +43,8 @@ Proyecto de producción: `fggqqrbldsdtumyqehny` (región São Paulo), ya configu
 2. En **SQL Editor**, ejecutar `supabase/schema.sql` y después `supabase/seed.sql`.
 3. En **Authentication > URL Configuration**, poner como Site URL la dirección donde se publica la app.
 4. Copiar **Project URL** y **anon public key** (Settings > API) en `config.js`.
-5. Cada persona entra con su email (link mágico). Los proveedores se inscriben solos desde la app. A vecinos, administración y propietarios se les asigna propiedad y rol con los `insert` comentados en `seed.sql`.
+5. Publicar las funciones `supabase/functions/cuentas` y `supabase/functions/mercadolibre` (sin verificación de JWT: validan la sesión por dentro).
+6. Ingreso con email y contraseña. Cada uno puede crear su cuenta; el propietario y la administración crean las cuentas de su gente desde la pestaña **Personas** (con contraseña inicial) y les mandan los datos. El link por email queda como alternativa y necesita un SMTP propio para no chocar con el límite de envíos de Supabase.
 
 ### Seguridad
 

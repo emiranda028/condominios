@@ -797,3 +797,29 @@ revoke execute on function invitar(text, uuid, rol_usuario, text, text), miembro
 grant execute on function invitar(text, uuid, rol_usuario, text, text), miembros(uuid), quitar_persona(uuid, text),
   crear_propiedad(text, text, text, text), editar_propiedad(uuid, text, text, text, text, boolean) to authenticated;
 revoke execute on function _puede_gestionar(uuid, rol_usuario), crear_perfil() from authenticated;
+
+-- ============================================================
+-- Cuentas con email y contraseña (función supabase/functions/cuentas)
+-- ============================================================
+create or replace function _uid_por_email(p_email text) returns uuid
+language sql stable security definer set search_path = public as $$
+  select id from auth.users where lower(email) = lower(trim(p_email)) limit 1
+$$;
+revoke execute on function _uid_por_email(text) from public, anon, authenticated;
+grant execute on function _uid_por_email(text) to service_role;
+
+-- Reemplaza crear_perfil: las cuentas creadas por cada uno (autoregistro) no toman invitaciones por email
+create or replace function crear_perfil() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into perfiles (id, nombre)
+  values (new.id, coalesce(nullif(new.raw_user_meta_data->>'nombre', ''), split_part(new.email, '@', 1)))
+  on conflict (id) do nothing;
+  if coalesce(new.raw_user_meta_data->>'autoregistro', 'false') <> 'true' then
+    insert into membresias (usuario_id, propiedad_id, rol, unidad)
+    select new.id, i.propiedad_id, i.rol, i.unidad from invitaciones i where i.email = lower(new.email)
+    on conflict (usuario_id, propiedad_id) do nothing;
+    delete from invitaciones where email = lower(new.email);
+  end if;
+  return new;
+end $$;

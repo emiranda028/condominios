@@ -41,7 +41,41 @@ a{color:var(--accent)}
 .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--grad-a),var(--grad-c));color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:14px}
 
 /* Saludo */
-.hero{display:flex;flex-direction:column;gap:6px;padding-block:20px 4px}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:12px 32px;align-items:end;padding-block:12px 4px}
+.hero-text{display:flex;flex-direction:column;gap:6px;min-width:0;padding-bottom:8px}
+.hero-art{min-width:0}
+@media (max-width:900px){.hero{grid-template-columns:minmax(0,1fr)} .hero-art{order:-1;max-width:520px}}
+
+/* Ilustración */
+.ilustra{display:block;width:100%;height:auto;max-width:100%}
+.ilustra .bld{fill:var(--surface-2);stroke:var(--line);stroke-width:1}
+.ilustra .bld-dark{fill:var(--surface);stroke:var(--line);stroke-width:1}
+.ilustra .house{fill:var(--raise);stroke:var(--line);stroke-width:1}
+.ilustra .roof{fill:url(#gRoof);opacity:.9}
+.ilustra .roofline{fill:url(#gRoof)}
+.ilustra .door{fill:var(--accent-bg)}
+.ilustra .balcony{fill:var(--line)}
+.ilustra .w-on{fill:var(--warn);opacity:.85}
+.ilustra .w-off{fill:var(--bg);opacity:.9}
+.ilustra .moon{fill:var(--ink);opacity:.9}
+.ilustra .star{fill:var(--ink);opacity:.6}
+.ilustra .trunk{fill:var(--raise)}
+.ilustra .leaf{fill:var(--ok);opacity:.55}
+.ilustra .ground{fill:var(--surface)}
+.ilustra .path{fill:none;stroke:var(--line);stroke-width:6;stroke-linecap:round}
+.ilustra .deck{fill:var(--raise)}
+.ilustra .wave{fill:none;stroke:var(--ink);stroke-opacity:.5;stroke-width:1.2}
+.ilustra .pole,.ilustra .lounger{fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round}
+.ilustra .seat{fill:var(--accent)}
+.ilustra .grill{fill:var(--muted)}
+.ilustra .smoke circle{fill:var(--muted);opacity:.25}
+@media (prefers-reduced-motion:no-preference){
+  .ilustra .w-tw{animation:titila 6s ease-in-out infinite}
+  .ilustra .smoke{animation:humo 5s ease-in-out infinite;transform-origin:483px 150px}
+}
+@keyframes titila{0%,60%,100%{opacity:.85}70%,90%{opacity:.12}}
+@keyframes humo{0%,100%{transform:translateY(0);opacity:.9}50%{transform:translateY(-4px);opacity:.5}}
+.login-art{max-width:520px;margin:4vh auto 8px;padding-inline:8px}
 .hero h1{margin:0;font-weight:400;font-size:clamp(30px,5vw,46px);line-height:1.12;letter-spacing:-.02em;text-wrap:balance}
 .hero h1 .name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b) 55%,var(--grad-c));-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{margin:0;color:var(--muted);font-size:17px;max-width:62ch}
@@ -78,7 +112,7 @@ a{color:var(--accent)}
 .chip[aria-pressed=true]{background:var(--accent-bg);border-color:var(--accent-bg);color:var(--accent)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row > *{min-width:0}
-input[type=text],input[type=number],input[type=email],input[type=tel],input[type=date],select,textarea{
+input[type=text],input[type=number],input[type=email],input[type=tel],input[type=date],input[type=password],select,textarea{
   background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:10px 14px;width:100%;min-width:0}
 input::placeholder,textarea::placeholder{color:var(--faint)}
 select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
@@ -217,7 +251,7 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-block}
 .check-chips label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 
 /* Ingreso */
-.login{max-width:440px;margin:6vh auto 0;padding:28px;display:flex;flex-direction:column;gap:16px}
+.login{max-width:440px;margin:0 auto;padding:28px;display:flex;flex-direction:column;gap:16px}
 .login h2{margin:0;font-weight:400;font-size:28px}
 .choices{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}
 .choice{padding:22px;display:flex;flex-direction:column;gap:10px;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:24px}

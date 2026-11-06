@@ -57,6 +57,75 @@ const sumaDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); retu
 
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 2800); }
 
+// ---------- Ilustración de portada: barrio de noche ----------
+function ilustracion() {
+  // Ventanas: grilla determinística (sin azar, para que no "salte" entre renders)
+  const ventanas = (x0, y0, cols, filas, w, h, gx, gy, semilla) => {
+    let out = "";
+    for (let f = 0; f < filas; f++) for (let c = 0; c < cols; c++) {
+      const n = (f * 7 + c * 13 + semilla) % 9;
+      const cls = n < 3 ? "w-on" : n === 3 ? "w-on w-tw" : "w-off";
+      out += `<rect class="${cls}" style="animation-delay:${(f + c) % 5}s" x="${x0 + c * gx}" y="${y0 + f * gy}" width="${w}" height="${h}" rx="1.5"/>`;
+    }
+    return out;
+  };
+  const arbol = (x, y, r) => `<rect class="trunk" x="${x - 2}" y="${y - 4}" width="4" height="16" rx="2"/><circle class="leaf" cx="${x}" cy="${y - r}" r="${r}"/>`;
+  return `<svg class="ilustra" viewBox="0 0 680 240" role="img" aria-label="Ilustración de un barrio con casas, edificios, pileta, parrilla y plaza">
+    <defs>
+      <linearGradient id="gRoof" x1="0" x2="1"><stop offset="0" stop-color="var(--grad-a)"/><stop offset="1" stop-color="var(--grad-c)"/></linearGradient>
+      <linearGradient id="gWater" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--grad-a)" stop-opacity=".85"/><stop offset="1" stop-color="var(--grad-a)" stop-opacity=".35"/></linearGradient>
+    </defs>
+    <circle class="moon" cx="612" cy="38" r="14"/>
+    <circle class="star" cx="80" cy="28" r="1.6"/><circle class="star" cx="210" cy="14" r="1.2"/><circle class="star" cx="470" cy="22" r="1.4"/><circle class="star" cx="560" cy="70" r="1.1"/><circle class="star" cx="330" cy="10" r="1"/>
+
+    <!-- Torre alta -->
+    <rect class="bld" x="250" y="40" width="78" height="174" rx="4"/>
+    <rect class="roofline" x="250" y="40" width="78" height="5" rx="2"/>
+    <rect class="bld-dark" x="282" y="24" width="14" height="16"/>
+    ${ventanas(260, 56, 5, 11, 9, 8, 13.5, 13.6, 2)}
+    <!-- Edificio medio con balcones -->
+    <rect class="bld" x="336" y="86" width="96" height="128" rx="4"/>
+    <rect class="roofline" x="336" y="86" width="96" height="5" rx="2"/>
+    ${ventanas(348, 100, 4, 7, 14, 10, 20, 15.5, 5)}
+    ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<rect class="balcony" x="342" y="${111 + i * 15.5}" width="84" height="2"/>`).join("")}
+    <!-- Edificio bajo atrás -->
+    <rect class="bld-dark" x="180" y="110" width="64" height="104" rx="3"/>
+    ${ventanas(190, 122, 3, 6, 10, 8, 16, 14.5, 1)}
+
+    <!-- Casa con techo a dos aguas -->
+    <polygon class="roof" points="36,152 82,116 128,152"/>
+    <rect class="house" x="46" y="150" width="72" height="64"/>
+    <rect class="door" x="74" y="182" width="16" height="32" rx="2"/>
+    <rect class="w-on" x="54" y="164" width="14" height="12" rx="1.5"/><rect class="w-off" x="96" y="164" width="14" height="12" rx="1.5"/>
+    <rect class="bld-dark" x="104" y="122" width="8" height="18"/>
+    <!-- Segunda casa -->
+    <polygon class="roof" points="132,172 158,150 184,172"/>
+    <rect class="house" x="138" y="170" width="40" height="44"/>
+    <rect class="w-on w-tw" x="146" y="180" width="10" height="10" rx="1.5" style="animation-delay:2s"/><rect class="door" x="161" y="190" width="10" height="24" rx="2"/>
+
+    <!-- Parrilla / quincho -->
+    <polygon class="roof" points="440,176 470,160 500,176"/>
+    <rect class="house" x="446" y="175" width="48" height="39"/>
+    <rect class="bld-dark" x="478" y="150" width="9" height="22"/>
+    <g class="smoke"><circle cx="483" cy="142" r="4"/><circle cx="488" cy="132" r="5"/><circle cx="482" cy="121" r="6"/></g>
+    <rect class="grill" x="454" y="192" width="20" height="7" rx="2"/><line class="pole" x1="458" y1="199" x2="458" y2="214"/><line class="pole" x1="470" y1="199" x2="470" y2="214"/>
+
+    <!-- Pileta con reposera -->
+    <rect class="deck" x="506" y="198" width="104" height="16" rx="3"/>
+    <rect x="514" y="201" width="72" height="10" rx="5" fill="url(#gWater)"/>
+    <path class="wave" d="M520 206 q5 -3 10 0 t10 0 t10 0 t10 0 t10 0 t10 0"/>
+    <path class="pole" d="M590 214 v-16 M596 214 v-16 M590 202 h6 M590 207 h6"/>
+    <path class="lounger" d="M600 197 l8 -8 M596 197 h14"/>
+    <!-- Plaza: hamaca y árboles -->
+    <path class="pole" d="M622 214 L632 176 L642 214 M652 214 L642 176 M632 176 H642"/>
+    <line class="pole" x1="637" y1="178" x2="637" y2="200"/><rect class="seat" x="632" y="200" width="10" height="3" rx="1"/>
+    ${arbol(16, 202, 14)}${arbol(670, 200, 12)}${arbol(230, 206, 10)}
+    <!-- Suelo y caminito -->
+    <rect class="ground" x="0" y="214" width="680" height="26"/>
+    <path class="path" d="M82 214 C 120 228, 300 222, 340 232 S 560 226, 600 240"/>
+  </svg>`;
+}
+
 // ---------- Estado de la interfaz ----------
 const ui = { rolDemo: "propietario", tab: null, prop: "all", filtro: "abiertos", q: "", cat: "", sel: null, form: null, opFiltro: "abiertos", opForm: null, compraForm: null, regionCompras: "todas", rubroProd: "Pintura", propPers: null, nuevaProp: false, busy: false };
 const personasCache = {};
@@ -162,6 +231,9 @@ const Demo = {
       p3: [{ email: "rossi.familia@ejemplo.com", nombre: "Familia Rossi", rol: "vecino", unidad: "Lote 14" }, { email: "ribera@ejemplo.com", nombre: "Grupo Ribera S.A.", rol: "propietario", unidad: null }]
     };
     return this.d.personas;
+  },
+  async crearPersona(a) {
+    return this.run("invitar", { p_email: a.email, p_propiedad: a.propiedad, p_rol: a.rol, p_unidad: a.unidad, p_nombre: a.nombre }).then((r) => (r === "agregado" ? "agregado" : "creado"));
   },
   async miembros(prop) {
     const yo = this.yo();
@@ -289,7 +361,7 @@ const Demo = {
         if (ui.rolDemo === "administracion" && a.p_rol !== "vecino") throw new Error("Tu rol no permite sumar personas con ese rol");
         const lista = (this.personas()[a.p_propiedad] = this.personas()[a.p_propiedad] || []);
         const i = lista.findIndex((m) => m.email === email);
-        const x = { email, nombre: a.p_nombre || null, rol: a.p_rol, unidad: a.p_unidad || null, pendiente: true };
+        const x = { email, nombre: a.p_nombre || null, rol: a.p_rol, unidad: a.p_unidad || null };
         if (i >= 0) lista[i] = { ...lista[i], rol: a.p_rol, unidad: a.p_unidad || null }; else lista.push(x);
         out = i >= 0 && !lista[i].pendiente ? "agregado" : "invitado"; break;
       }
@@ -335,6 +407,27 @@ const Nube = {
     const { data } = await this.sb.auth.getSession();
     return !!data.session;
   },
+  async funcion(nombre, body, conSesion) {
+    const h = { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey, Authorization: "Bearer " + CFG.supabaseAnonKey };
+    if (conSesion) { const { data } = await this.sb.auth.getSession(); h.Authorization = "Bearer " + data.session.access_token; }
+    const r = await fetch(`${CFG.supabaseUrl}/functions/v1/${nombre}`, { method: "POST", headers: h, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "No se pudo completar la acción");
+    return j;
+  },
+  async ingresar(email, password) {
+    const { error } = await this.sb.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(/invalid login credentials/i.test(error.message) ? "Email o contraseña incorrectos" : error.message);
+  },
+  async registrarse(nombre, email, password) {
+    await this.funcion("cuentas", { accion: "registro", nombre, email, password });
+    await this.ingresar(email, password);
+  },
+  async cambiarClave(password) {
+    const { error } = await this.sb.auth.updateUser({ password });
+    if (error) throw new Error(/different from the old/i.test(error.message) ? "La contraseña nueva tiene que ser distinta de la anterior" : error.message);
+  },
+  async crearPersona(a) { return (await this.funcion("cuentas", { accion: "crear", ...a }, true)).estado; },
   async login(email) {
     const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
     if (error) throw error;
@@ -483,7 +576,7 @@ function renderHeader() {
   const seg = $("#roleSeg"), box = $("#userBox");
   seg.hidden = !MODO_DEMO; box.hidden = MODO_DEMO || !S.usuario;
   if (MODO_DEMO) seg.innerHTML = `<span class="label" style="align-self:center;padding:0 8px 0 10px">Ver como</span>` + Object.keys(ROL_LABEL).map((k) => `<button data-rol="${k}" aria-pressed="${ui.rolDemo === k}">${ROL_LABEL[k]}</button>`).join("");
-  else if (S.usuario) box.innerHTML = `<span class="avatar" aria-hidden="true">${esc(S.usuario.nombre.trim()[0] || "?").toUpperCase()}</span><span>${esc(S.usuario.nombre)}</span><button class="btn sm" data-act="salir">Salir</button>`;
+  else if (S.usuario) box.innerHTML = `<span class="avatar" aria-hidden="true">${esc(S.usuario.nombre.trim()[0] || "?").toUpperCase()}</span><span>${esc(S.usuario.nombre)}</span><button class="btn sm" data-act="cambiar-clave">Contraseña</button><button class="btn sm" data-act="salir">Salir</button>`;
 }
 
 function renderHero() {
@@ -492,7 +585,7 @@ function renderHero() {
   const rol = rolPrincipal();
   const rs = S.reclamos.filter((r) => ui.prop === "all" || r.prop === ui.prop);
   if (ui.tab === "compras") sub = "Sumate a compras con vecinos de tu zona. Cuantos más se suman, más baja el precio por unidad.";
-  else if (ui.tab === "personas") sub = "Sumá vecinos, administración y propietarios a cada propiedad. Entran con su email y ya ven su edificio.";
+  else if (ui.tab === "personas") sub = "Sumá vecinos, administración y propietarios a cada propiedad. Les creás la cuenta y les mandás sus datos para entrar.";
   else if (ui.tab === "productos") sub = "Lo que más se usa en cada arreglo, con precios de Mercado Libre. Si conviene comprar en cantidad, armá una compra en conjunto.";
   else if (ui.tab === "pedidos" || ui.tab === "inscripcion") {
     const k = S.oportunidades.filter((o) => !o.mi).length;
@@ -509,6 +602,7 @@ function renderHero() {
   }
   $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(n)}</span>. ${ui.tab === "compras" ? "¿Qué compramos juntos?" : ui.tab === "productos" ? "¿Qué te hace falta?" : ui.tab === "personas" ? "¿A quién sumamos?" : ui.tab === "pedidos" || ui.tab === "inscripcion" ? "¿Qué cotizamos hoy?" : "¿Qué resolvemos hoy?"}`;
   $("#heroSub").textContent = sub;
+  $("#heroArt").innerHTML = ilustracion();
 }
 
 function renderTabs() {
@@ -818,15 +912,34 @@ function renderPersonas() {
           <div class="field"><label for="ivNombre">Nombre <span class="muted">(opcional)</span></label><input type="text" id="ivNombre" placeholder="Lucía Fernández"></div>
           <div class="grid2"><div class="field"><label for="ivRol">Rol</label><select id="ivRol">${roles.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
             <div class="field"><label for="ivUni">Unidad</label><input type="text" id="ivUni" placeholder="UF 7A, Lote 14"></div></div>
+          <div class="field"><label for="ivPass">Contraseña inicial</label><div class="row" style="flex-wrap:nowrap"><input type="text" id="ivPass" required minlength="8" value="${claveSugerida()}" autocomplete="off"><button type="button" class="btn sm" data-act="nueva-clave">Otra</button></div>
+            <span class="muted" style="font-size:13px">Si la persona ya tiene cuenta, se suma con la contraseña que ya usa.</span></div>
           <button class="btn primary">Sumar a ${esc(prop.nombre)}</button>
-          <p class="muted" style="margin:0;font-size:13.5px">Mandale este link para que entre con ese email:</p>
-          <div class="row" style="flex-wrap:nowrap"><input type="text" id="ivLink" readonly value="${esc(urlApp())}" aria-label="Link de la app"><button type="button" class="btn sm" data-act="copiar-link">Copiar</button></div>
         </form>
+        ${ui.ultimaCuenta ? cuentaCreada(ui.ultimaCuenta) : ""}
         ${esProp ? formPropiedad(prop) : ""}
       </div>
     </div>
   </div>`;
   if (!lista) cargarPersonas(prop.id);
+}
+function claveSugerida() {
+  const sil = ["ca", "sa", "ma", "lo", "pe", "ri", "to", "nu", "be", "do", "fi", "ga"];
+  const r = new Uint32Array(4); crypto.getRandomValues(r);
+  return sil[r[0] % 12] + sil[r[1] % 12] + sil[r[2] % 12] + "-" + String(1000 + (r[3] % 9000));
+}
+function textoAcceso(c) {
+  return c.estado === "creado"
+    ? `Hola${c.nombre ? " " + c.nombre.split(" ")[0] : ""}! Te sumé a ${c.propNombre} en Condominios.\nEntrá en ${urlApp()}\nUsuario: ${c.email}\nContraseña: ${c.password}\nDespués la podés cambiar desde "Contraseña".`
+    : `Hola${c.nombre ? " " + c.nombre.split(" ")[0] : ""}! Te sumé a ${c.propNombre} en Condominios. Entrá en ${urlApp()} con tu usuario de siempre (${c.email}).`;
+}
+function cuentaCreada(c) {
+  return `<section class="card panel-form" style="padding:20px;border-color:color-mix(in srgb,var(--ok) 45%,var(--line))">
+    <h3 style="margin:0">${c.estado === "creado" ? "Cuenta creada" : "Persona sumada"}</h3>
+    <p class="muted" style="margin:0;font-size:14px">Mandale estos datos por WhatsApp o email:</p>
+    <textarea id="ivAcceso" readonly rows="5" aria-label="Datos de acceso">${esc(textoAcceso(c))}</textarea>
+    <div class="row"><button type="button" class="btn sm primary" data-act="copiar-acceso">Copiar mensaje</button><button type="button" class="btn sm" data-act="cerrar-acceso">Listo</button></div>
+  </section>`;
 }
 function formPropiedad(p) {
   const n = !p, id = n ? "np" : "ep";
@@ -867,6 +980,7 @@ function renderRegistro() {
   $("#hero").hidden = false;
   $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(S.usuario.nombre.split(" ")[0])}</span>. ¿Cómo vas a usar Condominios?`;
   $("#heroSub").textContent = "Elegí una opción para empezar.";
+  $("#heroArt").innerHTML = ilustracion();
   if (ui.form === "inscribirme") { $("#view").innerHTML = formInscripcion(null); return; }
   if (ui.form === "propiedad") { $("#view").innerHTML = formPropiedad(null); return; }
   $("#view").innerHTML = `<div class="choices">
@@ -889,13 +1003,34 @@ function mostrarLogin() {
   if (errHash) history.replaceState(null, "", location.pathname + location.search);
   ["#hero", "#tabs"].forEach((s) => ($(s).hidden = true));
   renderHeader();
-  $("#view").innerHTML = `<form class="card login" data-form="login">
-    <h2>Ingresá a Condominios</h2>
-    <p class="muted" style="margin:0">Te mandamos un link a tu email para entrar, sin contraseña.</p>
-    <div class="field"><label for="lgEmail">Email</label><input type="email" id="lgEmail" required placeholder="nombre@ejemplo.com" autocomplete="email"></div>
-    <button class="btn primary">Enviarme el link</button>
-    <p class="muted" id="lgMsg" style="margin:0;font-size:14px">${errHash ? esc(errorLogin(errHash)) : ""}</p>
-  </form>`;
+  const modo = ui.loginModo || "ingresar";
+  const msg = `<p class="muted" id="lgMsg" role="status" style="margin:0;font-size:14px">${errHash ? esc(errorLogin(errHash)) : ""}</p>`;
+  const formas = {
+    ingresar: `<form class="card login" data-form="ingresar">
+      <h2>Ingresá a Condominios</h2>
+      <div class="field"><label for="lgEmail">Email</label><input type="email" id="lgEmail" required placeholder="nombre@ejemplo.com" autocomplete="username"></div>
+      <div class="field"><label for="lgPass">Contraseña</label><input type="password" id="lgPass" required autocomplete="current-password"></div>
+      <button class="btn primary">Ingresar</button>${msg}
+      <div class="row" style="justify-content:space-between;font-size:14px"><button type="button" class="linkbtn" data-login="crear">Crear cuenta</button><button type="button" class="linkbtn" data-login="link">Entrar con un link por email</button></div>
+    </form>`,
+    crear: `<form class="card login" data-form="crear-cuenta">
+      <h2>Crear cuenta</h2>
+      <p class="muted" style="margin:0;font-size:14px">Si administrás o vivís en un edificio que ya usa Condominios, pedile a la administración que te sume: te pasan tu usuario y contraseña.</p>
+      <div class="field"><label for="rgNom">Nombre</label><input type="text" id="rgNom" required autocomplete="name" placeholder="Emmanuel Miranda"></div>
+      <div class="field"><label for="rgEmail">Email</label><input type="email" id="rgEmail" required autocomplete="username" placeholder="nombre@ejemplo.com"></div>
+      <div class="field"><label for="rgPass">Contraseña</label><input type="password" id="rgPass" required minlength="8" autocomplete="new-password" placeholder="Al menos 8 caracteres"></div>
+      <button class="btn primary">Crear cuenta e ingresar</button>${msg}
+      <button type="button" class="linkbtn" data-login="ingresar" style="align-self:flex-start;font-size:14px">Ya tengo cuenta</button>
+    </form>`,
+    link: `<form class="card login" data-form="login">
+      <h2>Entrar con un link</h2>
+      <p class="muted" style="margin:0">Te mandamos un link a tu email para entrar sin contraseña.</p>
+      <div class="field"><label for="lgEmail">Email</label><input type="email" id="lgEmail" required placeholder="nombre@ejemplo.com" autocomplete="email"></div>
+      <button class="btn primary">Enviarme el link</button>${msg}
+      <button type="button" class="linkbtn" data-login="ingresar" style="align-self:flex-start;font-size:14px">Volver a ingresar con contraseña</button>
+    </form>`
+  };
+  $("#view").innerHTML = `<div class="login-art">${ilustracion()}</div>${formas[modo]}`;
 }
 
 // ======================================================================
@@ -904,6 +1039,7 @@ function mostrarLogin() {
 document.addEventListener("click", async (e) => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.dataset.close) { $("#" + t.dataset.close).hidden = true; return; }
+  if (t.dataset.login) { ui.loginModo = t.dataset.login; mostrarLogin(); const f = $("#view input"); if (f) f.focus(); return; }
   if (t.dataset.rol) { ui.rolDemo = t.dataset.rol; ui.form = ui.opForm = ui.compraForm = null; ui.tab = null; ui.prop = "all"; ui.sel = null; document.body.classList.remove("detail"); await recargar(); return; }
   if (t.dataset.tab) { ui.tab = t.dataset.tab; ui.form = ui.opForm = ui.compraForm = null; render(); if (ui.tab === "pedidos" && S.avisos.some((a) => !a.leido)) DB.run("marcar_avisos_leidos", {}).then(() => { S.avisos.forEach((x) => (x.leido = true)); renderTabs(); }).catch(() => {}); return; }
   if (t.dataset.f) { ui.filtro = t.dataset.f; renderLista(); return; }
@@ -918,6 +1054,7 @@ document.addEventListener("click", async (e) => {
     case "reintentar": return arrancar();
     case "refrescar": return recargar();
     case "salir": return Nube.salir();
+    case "cambiar-clave": $("#fClave").reset(); $("#ckMsg").textContent = ""; $("#ovClave").hidden = false; return $("#ckPass").focus();
     case "volver": document.body.classList.remove("detail"); return render();
     case "cancelar": ui.form = ui.opForm = ui.compraForm = null; return render();
     case "nuevo-reclamo": return abrirReclamo();
@@ -925,6 +1062,9 @@ document.addEventListener("click", async (e) => {
     case "nueva-prop": ui.nuevaProp = true; renderPersonas(); return $("#npNom").focus();
     case "cancelar-prop": ui.nuevaProp = false; if (vista === "registro") { ui.form = null; return render(); } return renderPersonas();
     case "quitar-persona": { const em = t.dataset.email; const ok = await correr("quitar_persona", { p_propiedad: ui.propPers, p_email: em }, "Listo, " + em + " ya no está en la propiedad"); if (ok) { delete personasCache[ui.propPers]; render(); } return; }
+    case "nueva-clave": $("#ivPass").value = claveSugerida(); return;
+    case "cerrar-acceso": ui.ultimaCuenta = null; return renderPersonas();
+    case "copiar-acceso": { const ta = $("#ivAcceso"); try { await navigator.clipboard.writeText(ta.value); toast("Mensaje copiado"); } catch (e) { ta.select(); toast("Seleccioné el mensaje: copialo con Ctrl+C"); } return; }
     case "copiar-link": { const inp = $("#ivLink"); try { await navigator.clipboard.writeText(inp.value); toast("Link copiado"); } catch (e) { inp.select(); toast("Seleccioné el link: copialo con Ctrl+C"); } return; }
     case "ver-productos": ui.tab = "productos"; ui.rubroProd = t.dataset.rubro; document.body.classList.remove("detail"); render(); return window.scrollTo({ top: 0 });
     case "compra-producto": abrirCompra(); $("#ncCat").value = ui.rubroProd; $("#ncProd").value = capital(t.dataset.busqueda); $("#ncUni").focus(); return;
@@ -962,6 +1102,18 @@ document.addEventListener("submit", async (e) => {
     return;
   }
   switch (k) {
+    case "ingresar": {
+      const msg = $("#lgMsg"); msg.textContent = "Ingresando…";
+      try { await Nube.ingresar(v("lgEmail"), $("#lgPass").value); msg.textContent = ""; }
+      catch (err) { msg.textContent = err.message; }
+      return;
+    }
+    case "crear-cuenta": {
+      const msg = $("#lgMsg"); msg.textContent = "Creando tu cuenta…";
+      try { await Nube.registrarse(v("rgNom"), v("rgEmail"), $("#rgPass").value); msg.textContent = ""; ui.loginModo = "ingresar"; }
+      catch (err) { msg.textContent = err.message; }
+      return;
+    }
     case "login": {
       const msg = $("#lgMsg");
       try { await Nube.login(v("lgEmail")); msg.textContent = "Listo. Revisá tu email y tocá el link para entrar."; }
@@ -969,10 +1121,16 @@ document.addEventListener("submit", async (e) => {
       return;
     }
     case "invitar": {
-      const email = v("ivEmail");
-      const r = await correr("invitar", { p_email: email, p_propiedad: ui.propPers, p_rol: v("ivRol"), p_unidad: v("ivUni") || null, p_nombre: v("ivNombre") || null },
-        (r) => r === "agregado" ? email + " ya tenía cuenta: quedó sumado a la propiedad" : "Invitación guardada. Cuando " + email + " entre con su email, va a ver la propiedad");
-      if (r) { delete personasCache[ui.propPers]; render(); }
+      if (ui.busy) return;
+      const datos = { email: v("ivEmail").toLowerCase(), nombre: v("ivNombre"), rol: v("ivRol"), unidad: v("ivUni"), propiedad: ui.propPers, password: v("ivPass") };
+      ui.busy = true;
+      try {
+        const estado = await DB.crearPersona(datos);
+        ui.ultimaCuenta = { ...datos, estado, propNombre: (S.props.find((p) => p.id === ui.propPers) || {}).nombre };
+        delete personasCache[ui.propPers]; render();
+        toast(estado === "creado" ? "Cuenta creada" : datos.email + " ya tenía cuenta: quedó sumado");
+      } catch (err) { toast(err.message); }
+      finally { ui.busy = false; }
       return;
     }
     case "crear-prop": {
@@ -981,6 +1139,15 @@ document.addEventListener("submit", async (e) => {
       return;
     }
     case "editar-prop": return correr("editar_propiedad", { p_propiedad: ui.propPers, p_nombre: v("epNom"), p_tipo: v("epTipo"), p_zona: v("epZona"), p_region: v("epReg"), p_cotizacion_abierta: $("#epCot").checked }, "Propiedad actualizada");
+    case "cambiar-clave": {
+      const a = $("#ckPass").value, b = $("#ckPass2").value, msg = $("#ckMsg");
+      if (a.length < 8) { msg.textContent = "Tiene que tener al menos 8 caracteres"; return; }
+      if (a !== b) { msg.textContent = "Las dos contraseñas no coinciden"; return; }
+      msg.textContent = "Guardando…";
+      try { await Nube.cambiarClave(a); $("#ovClave").hidden = true; toast("Contraseña actualizada"); }
+      catch (err) { msg.textContent = err.message; }
+      return;
+    }
     case "comentar": return correr("comentar", { p_reclamo: r.id, p_texto: v("cmTxt") });
     case "desest": return correr("desestimar_reclamo", { p_reclamo: r.id, p_motivo: v("dsMot") }, "Reclamo desestimado");
     case "rech": return correr("desestimar_presupuesto", { p_presupuesto: f.dataset.p, p_motivo: v("rcMot") }, "Presupuesto desestimado");
@@ -1002,11 +1169,11 @@ document.addEventListener("input", (e) => { if (e.target.id === "q") { ui.q = e.
 document.addEventListener("change", (e) => {
   if (e.target.id === "propSel") { ui.prop = e.target.value; ui.sel = null; const f = filtrados(); ui.sel = f[0] ? f[0].id : null; render(); }
   if (e.target.id === "catSel") { ui.cat = e.target.value; renderLista(); }
-  if (e.target.id === "propPersSel") { ui.propPers = e.target.value; ui.nuevaProp = false; renderPersonas(); }
+  if (e.target.id === "propPersSel") { ui.propPers = e.target.value; ui.nuevaProp = false; ui.ultimaCuenta = null; renderPersonas(); }
   if (e.target.id === "nrCat" || e.target.id === "nrProp") hintReclamo();
 });
-["#ovReclamo", "#ovCompra"].forEach((s) => $(s).addEventListener("click", (e) => { if (e.target === $(s)) $(s).hidden = true; }));
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") ["#ovReclamo", "#ovCompra"].forEach((s) => ($(s).hidden = true)); });
+["#ovReclamo", "#ovCompra", "#ovClave"].forEach((s) => $(s).addEventListener("click", (e) => { if (e.target === $(s)) $(s).hidden = true; }));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") ["#ovReclamo", "#ovCompra", "#ovClave"].forEach((s) => ($(s).hidden = true)); });
 $("#resetBtn").addEventListener("click", async () => { Demo.reset(); ui.sel = null; ui.form = ui.opForm = ui.compraForm = null; await recargar(); toast("Ejemplo restablecido"); });
 
 function abrirReclamo() {

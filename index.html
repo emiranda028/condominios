@@ -17,7 +17,7 @@
     <div class="user" id="userBox" hidden></div>
   </header>
 
-  <section class="hero" id="hero" hidden><h1 id="heroTitle"></h1><p id="heroSub"></p></section>
+  <section class="hero" id="hero" hidden><div class="hero-text"><h1 id="heroTitle"></h1><p id="heroSub"></p></div><div class="hero-art" id="heroArt" aria-hidden="false"></div></section>
   <nav class="tabs" id="tabs" role="tablist" aria-label="Secciones" hidden></nav>
   <main id="view"></main>
   <div class="foot-note" id="footNote" hidden><span>Modo demo: los cambios quedan guardados solo en este navegador.</span><button class="linkbtn" id="resetBtn">Restablecer ejemplo</button></div>
@@ -60,6 +60,16 @@
     </div>
     <div class="field"><label for="ncDet">Detalle</label><textarea id="ncDet" placeholder="Marca o calidad, entrega a domicilio, fecha tentativa"></textarea></div>
     <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-close="ovCompra">Cancelar</button><button class="btn primary">Publicar compra</button></div>
+  </form>
+</div>
+
+<div class="overlay" id="ovClave" hidden>
+  <form class="modal" id="fClave" data-form="cambiar-clave" style="max-width:420px">
+    <h2>Cambiar contraseña</h2>
+    <div class="field"><label for="ckPass">Contraseña nueva</label><input type="password" id="ckPass" required minlength="8" autocomplete="new-password" placeholder="Al menos 8 caracteres"></div>
+    <div class="field"><label for="ckPass2">Repetila</label><input type="password" id="ckPass2" required minlength="8" autocomplete="new-password"></div>
+    <p class="muted" id="ckMsg" role="status" style="margin:0;font-size:14px"></p>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-close="ovClave">Cancelar</button><button class="btn primary">Guardar</button></div>
   </form>
 </div>
 
