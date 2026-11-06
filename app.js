@@ -58,7 +58,8 @@ const sumaDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); retu
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 2800); }
 
 // ---------- Estado de la interfaz ----------
-const ui = { rolDemo: "propietario", tab: null, prop: "all", filtro: "abiertos", q: "", cat: "", sel: null, form: null, opFiltro: "abiertos", opForm: null, compraForm: null, regionCompras: "todas", rubroProd: "Pintura", busy: false };
+const ui = { rolDemo: "propietario", tab: null, prop: "all", filtro: "abiertos", q: "", cat: "", sel: null, form: null, opFiltro: "abiertos", opForm: null, compraForm: null, regionCompras: "todas", rubroProd: "Pintura", propPers: null, nuevaProp: false, busy: false };
+const personasCache = {};
 const productosCache = {};
 let S = { usuario: null, props: [], roles: {}, unidades: {}, reclamos: [], proveedor: null, oportunidades: [], compras: [], avisos: [] };
 
@@ -152,6 +153,20 @@ const Demo = {
   async iniciar() { try { this.d = JSON.parse(localStorage.getItem(this.KEY)); } catch (e) {} if (!this.d || !this.d.reclamos) this.d = seedDemo(); return true; },
   guardar() { try { localStorage.setItem(this.KEY, JSON.stringify(this.d)); } catch (e) {} },
   reset() { this.d = seedDemo(); this.guardar(); },
+  personas() {
+    if (!this.d.personas) this.d.personas = {
+      p1: [{ email: "lucia.fernandez@ejemplo.com", nombre: "Lucía Fernández", rol: "vecino", unidad: "UF 7A" }, { email: "martin.r@ejemplo.com", nombre: "Martín Ruiz", rol: "vecino", unidad: "UF 8A" },
+           { email: "adm.quiroga@ejemplo.com", nombre: "Administración Quiroga", rol: "administracion", unidad: null }, { email: "ribera@ejemplo.com", nombre: "Grupo Ribera S.A.", rol: "propietario", unidad: null },
+           { email: "sofia.p@ejemplo.com", nombre: null, rol: "vecino", unidad: "UF 2C", pendiente: true }],
+      p2: [{ email: "martin.sosa@ejemplo.com", nombre: "Martín Sosa", rol: "vecino", unidad: "UF 3D" }, { email: "adm.quiroga@ejemplo.com", nombre: "Administración Quiroga", rol: "administracion", unidad: null }, { email: "ribera@ejemplo.com", nombre: "Grupo Ribera S.A.", rol: "propietario", unidad: null }],
+      p3: [{ email: "rossi.familia@ejemplo.com", nombre: "Familia Rossi", rol: "vecino", unidad: "Lote 14" }, { email: "ribera@ejemplo.com", nombre: "Grupo Ribera S.A.", rol: "propietario", unidad: null }]
+    };
+    return this.d.personas;
+  },
+  async miembros(prop) {
+    const yo = this.yo();
+    return clone(this.personas()[prop] || []).map((m) => ({ ...m, pendiente: !!m.pendiente, soy_yo: m.nombre === yo.nombre }));
+  },
   async productos(rubro) { return { rubro, conectado: false, grupos: (BUSQUEDAS[rubro] || []).map((b) => ({ busqueda: b, link: linkListado(b), items: [] })) }; },
   yo() { return DEMO_USERS[ui.rolDemo]; },
   async cargar() {
@@ -268,6 +283,33 @@ const Demo = {
         const o = { compra: c.id, provId: pvYo.id, nombre: pvYo.razon + " · " + pvYo.tel, escalas: a.p_escalas, detalle: a.p_detalle };
         const i = d.ofertas.findIndex((x) => x.compra === c.id && x.provId === pvYo.id); if (i >= 0) d.ofertas[i] = o; else d.ofertas.push(o); break;
       }
+      case "invitar": {
+        const email = (a.p_email || "").trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("El email no es válido");
+        if (ui.rolDemo === "administracion" && a.p_rol !== "vecino") throw new Error("Tu rol no permite sumar personas con ese rol");
+        const lista = (this.personas()[a.p_propiedad] = this.personas()[a.p_propiedad] || []);
+        const i = lista.findIndex((m) => m.email === email);
+        const x = { email, nombre: a.p_nombre || null, rol: a.p_rol, unidad: a.p_unidad || null, pendiente: true };
+        if (i >= 0) lista[i] = { ...lista[i], rol: a.p_rol, unidad: a.p_unidad || null }; else lista.push(x);
+        out = i >= 0 && !lista[i].pendiente ? "agregado" : "invitado"; break;
+      }
+      case "quitar_persona": {
+        const lista = this.personas()[a.p_propiedad] || [];
+        const m = lista.find((x) => x.email === a.p_email);
+        if (ui.rolDemo === "administracion" && m && m.rol !== "vecino") throw new Error("Tu rol no permite quitar a esta persona");
+        this.personas()[a.p_propiedad] = lista.filter((x) => x.email !== a.p_email); break;
+      }
+      case "crear_propiedad": {
+        if (!a.p_nombre) throw new Error("Poné el nombre o la dirección de la propiedad");
+        const id = "p" + Date.now();
+        d.props.push({ id, nombre: a.p_nombre, tipo: a.p_tipo, zona: a.p_zona, region: a.p_region || "CABA" });
+        yo.props[id] = ""; this.personas()[id] = [{ email: "ribera@ejemplo.com", nombre: yo.nombre, rol: "propietario", unidad: null }];
+        out = id; break;
+      }
+      case "editar_propiedad": {
+        const pr = d.props.find((x) => x.id === a.p_propiedad);
+        Object.assign(pr, { nombre: a.p_nombre, tipo: a.p_tipo, zona: a.p_zona, region: a.p_region, cotizacion_abierta: a.p_cotizacion_abierta }); break;
+      }
       case "cerrar_compra": { const c = d.compras.find((x) => x.id === a.p_compra); if (c.creador !== yo.id) throw new Error("Solo quien creó la compra puede cerrarla"); c.estado = "cerrada"; break; }
       default: throw new Error("Acción desconocida: " + fn);
     }
@@ -305,7 +347,7 @@ const Nube = {
     const [perfil, mem, props, rub, rec, pv, pvr, ops, comp, ofs, avs] = await Promise.all([
       sb.from("perfiles").select("nombre").eq("id", user.id).maybeSingle(),
       sb.from("membresias").select("propiedad_id,rol,unidad").eq("usuario_id", user.id),
-      sb.from("propiedades").select("id,nombre,tipo,zona,region").order("nombre"),
+      sb.from("propiedades").select("id,nombre,tipo,zona,region,cotizacion_abierta").order("nombre"),
       sb.from("rubros").select("nombre,requiere_presup").order("orden"),
       sb.from("reclamos").select("*,presupuestos(*),eventos(*)").order("id", { ascending: false }),
       sb.from("proveedores").select("*").eq("id", user.id).maybeSingle(),
@@ -351,6 +393,7 @@ const Nube = {
     };
   },
   async run(fn, args) { const { data, error } = await this.sb.rpc(fn, args); if (error) throw new Error(error.message); return data; },
+  async miembros(prop) { return (await this.run("miembros", { p_propiedad: prop })) || []; },
   async productos(rubro) {
     const { data } = await this.sb.auth.getSession();
     const r = await fetch(`${CFG.supabaseUrl}/functions/v1/mercadolibre/productos?rubro=${encodeURIComponent(rubro)}`, {
@@ -412,6 +455,7 @@ function tabsDisponibles() {
   if (S.proveedor) t.push({ id: "pedidos", label: "Pedidos para cotizar", badge: S.avisos.filter((a) => !a.leido).length });
   if (S.props.length || S.proveedor) t.push({ id: "compras", label: "Compras en conjunto" });
   if (S.props.length) t.push({ id: "productos", label: "Productos" });
+  if (propsGestion().length) t.push({ id: "personas", label: "Personas" });
   if (S.proveedor) t.push({ id: "inscripcion", label: "Mi inscripción" });
   return t;
 }
@@ -432,7 +476,7 @@ function render() {
   if (vista === "registro") return renderRegistro();
   if (!enApp) return;
   renderHero(); renderTabs();
-  ({ reclamos: renderReclamos, pedidos: renderPedidos, compras: renderCompras, inscripcion: renderInscripcion, productos: renderProductos })[ui.tab]();
+  ({ reclamos: renderReclamos, pedidos: renderPedidos, compras: renderCompras, inscripcion: renderInscripcion, productos: renderProductos, personas: renderPersonas })[ui.tab]();
 }
 
 function renderHeader() {
@@ -448,6 +492,7 @@ function renderHero() {
   const rol = rolPrincipal();
   const rs = S.reclamos.filter((r) => ui.prop === "all" || r.prop === ui.prop);
   if (ui.tab === "compras") sub = "Sumate a compras con vecinos de tu zona. Cuantos más se suman, más baja el precio por unidad.";
+  else if (ui.tab === "personas") sub = "Sumá vecinos, administración y propietarios a cada propiedad. Entran con su email y ya ven su edificio.";
   else if (ui.tab === "productos") sub = "Lo que más se usa en cada arreglo, con precios de Mercado Libre. Si conviene comprar en cantidad, armá una compra en conjunto.";
   else if (ui.tab === "pedidos" || ui.tab === "inscripcion") {
     const k = S.oportunidades.filter((o) => !o.mi).length;
@@ -462,7 +507,7 @@ function renderHero() {
     const k = rs.filter(abierto).length;
     sub = k ? `Hay ${plural(k, "reclamo abierto", "reclamos abiertos")} en tu edificio. Contá lo que pasa y lo seguís desde acá.` : "Todo en orden en tu edificio.";
   }
-  $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(n)}</span>. ${ui.tab === "compras" ? "¿Qué compramos juntos?" : ui.tab === "productos" ? "¿Qué te hace falta?" : ui.tab === "pedidos" || ui.tab === "inscripcion" ? "¿Qué cotizamos hoy?" : "¿Qué resolvemos hoy?"}`;
+  $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(n)}</span>. ${ui.tab === "compras" ? "¿Qué compramos juntos?" : ui.tab === "productos" ? "¿Qué te hace falta?" : ui.tab === "personas" ? "¿A quién sumamos?" : ui.tab === "pedidos" || ui.tab === "inscripcion" ? "¿Qué cotizamos hoy?" : "¿Qué resolvemos hoy?"}`;
   $("#heroSub").textContent = sub;
 }
 
@@ -740,6 +785,66 @@ function cuerpoProductos(d) {
   </section>`).join("")}</div>`;
 }
 
+// ---------- Personas y propiedades ----------
+const propsGestion = () => S.props.filter((p) => ["propietario", "administracion"].includes(S.roles[p.id]));
+const urlApp = () => location.origin + location.pathname;
+
+function renderPersonas() {
+  const ps = propsGestion();
+  if (!ps.some((p) => p.id === ui.propPers)) ui.propPers = (ps.find((p) => p.id === ui.prop) || ps[0]).id;
+  const prop = S.props.find((p) => p.id === ui.propPers), miRol = S.roles[prop.id], esProp = miRol === "propietario";
+  const lista = personasCache[prop.id];
+  const roles = esProp ? [["vecino", "Vecino"], ["administracion", "Administración"], ["propietario", "Propietario"]] : [["vecino", "Vecino"]];
+  $("#view").innerHTML = `<div class="wrap" style="gap:16px">
+    <div class="row" style="justify-content:space-between">
+      <select id="propPersSel" aria-label="Propiedad" style="max-width:340px">${ps.map((p) => `<option value="${p.id}" ${p.id === prop.id ? "selected" : ""}>${esc(p.nombre)} · ${esc(p.zona || p.region || "")}</option>`).join("")}</select>
+      ${S.props.some((p) => S.roles[p.id] === "propietario") || !S.props.length ? `<button class="btn tonal" data-act="nueva-prop">+ Nueva propiedad</button>` : ""}
+    </div>
+    ${ui.nuevaProp ? formPropiedad(null) : ""}
+    <div class="main" style="grid-template-columns:minmax(0,1fr) minmax(0,380px)">
+      <section class="card op">
+        <div class="row" style="justify-content:space-between"><h4>Personas en ${esc(prop.nombre)}</h4>${lista ? `<span class="muted" style="font-size:14px">${plural(lista.filter((m) => !m.pendiente).length, "activa", "activas")}${lista.some((m) => m.pendiente) ? " · " + plural(lista.filter((m) => m.pendiente).length, "invitación pendiente", "invitaciones pendientes") : ""}</span>` : ""}</div>
+        ${lista ? (lista.length ? `<ul class="people">${lista.map((m) => `<li>
+            <span class="avatar sm" aria-hidden="true">${esc((m.nombre || m.email).trim()[0].toUpperCase())}</span>
+            <span class="people-main"><b>${esc(m.nombre || m.email)}${m.soy_yo ? " (vos)" : ""}</b><span class="muted">${m.nombre ? esc(m.email) : "Todavía no entró a la app"}</span></span>
+            <span class="row" style="gap:6px;justify-content:flex-end">${m.unidad ? `<span class="zona">${esc(m.unidad)}</span>` : ""}<span class="pill ${m.pendiente ? "e-aprobacion" : m.rol === "propietario" ? "e-en_curso" : m.rol === "administracion" ? "e-nuevo" : "e-presupuestando"}">${m.pendiente ? "Invitado · " : ""}${ROL_LABEL[m.rol]}</span>
+              ${!m.soy_yo && (esProp || m.rol === "vecino") ? `<button class="btn sm bad" data-act="quitar-persona" data-email="${esc(m.email)}" aria-label="Quitar a ${esc(m.nombre || m.email)}">Quitar</button>` : ""}</span>
+          </li>`).join("")}</ul>` : `<p>Todavía no hay nadie más en esta propiedad.</p>`) : `<p>Cargando…</p>`}
+      </section>
+      <div class="wrap" style="gap:16px">
+        <form class="card panel-form" data-form="invitar" style="padding:20px">
+          <h3 style="margin:0">Sumar persona</h3>
+          <div class="field"><label for="ivEmail">Email</label><input type="email" id="ivEmail" required placeholder="nombre@ejemplo.com"></div>
+          <div class="field"><label for="ivNombre">Nombre <span class="muted">(opcional)</span></label><input type="text" id="ivNombre" placeholder="Lucía Fernández"></div>
+          <div class="grid2"><div class="field"><label for="ivRol">Rol</label><select id="ivRol">${roles.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
+            <div class="field"><label for="ivUni">Unidad</label><input type="text" id="ivUni" placeholder="UF 7A, Lote 14"></div></div>
+          <button class="btn primary">Sumar a ${esc(prop.nombre)}</button>
+          <p class="muted" style="margin:0;font-size:13.5px">Mandale este link para que entre con ese email:</p>
+          <div class="row" style="flex-wrap:nowrap"><input type="text" id="ivLink" readonly value="${esc(urlApp())}" aria-label="Link de la app"><button type="button" class="btn sm" data-act="copiar-link">Copiar</button></div>
+        </form>
+        ${esProp ? formPropiedad(prop) : ""}
+      </div>
+    </div>
+  </div>`;
+  if (!lista) cargarPersonas(prop.id);
+}
+function formPropiedad(p) {
+  const n = !p, id = n ? "np" : "ep";
+  return `<form class="card panel-form" data-form="${n ? "crear-prop" : "editar-prop"}" style="padding:20px">
+    <h3 style="margin:0">${n ? "Nueva propiedad" : "Datos de la propiedad"}</h3>
+    <div class="field"><label for="${id}Nom">Nombre o dirección</label><input type="text" id="${id}Nom" required value="${esc(p ? p.nombre : "")}" placeholder="Av. Corrientes 1234"></div>
+    <div class="grid2"><div class="field"><label for="${id}Tipo">Tipo</label><input type="text" id="${id}Tipo" value="${esc(p ? p.tipo || "" : "")}" placeholder="Edificio · 30 UF"></div>
+      <div class="field"><label for="${id}Zona">Barrio</label><input type="text" id="${id}Zona" value="${esc(p ? p.zona || "" : "")}" placeholder="Almagro, CABA"></div></div>
+    <div class="field"><label for="${id}Reg">Zona para proveedores</label><select id="${id}Reg">${REGIONES.map((r) => `<option ${p && p.region === r ? "selected" : ""}>${r}</option>`).join("")}</select></div>
+    ${p ? `<label class="row" style="gap:8px;font-size:14px"><input type="checkbox" id="epCot" ${p.cotizacion_abierta !== false ? "checked" : ""}> Publicar los reclamos nuevos a los proveedores apenas se cargan</label>` : ""}
+    <div class="row"><button class="btn ${n ? "primary" : ""}">${n ? "Crear propiedad" : "Guardar cambios"}</button>${n ? `<button type="button" class="btn" data-act="cancelar-prop">Cancelar</button>` : ""}</div>
+  </form>`;
+}
+async function cargarPersonas(prop) {
+  try { personasCache[prop] = await DB.miembros(prop); } catch (e) { personasCache[prop] = []; toast(e.message); }
+  if (ui.tab === "personas" && ui.propPers === prop) renderPersonas();
+}
+
 // ---------- Inscripción de proveedores ----------
 function formInscripcion(p) {
   p = p || { razon: "", tel: "", rubros: [], zonas: ["CABA"], cuit: "", matricula: "", descripcion: "" };
@@ -763,8 +868,10 @@ function renderRegistro() {
   $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(S.usuario.nombre.split(" ")[0])}</span>. ¿Cómo vas a usar Condominios?`;
   $("#heroSub").textContent = "Elegí una opción para empezar.";
   if (ui.form === "inscribirme") { $("#view").innerHTML = formInscripcion(null); return; }
+  if (ui.form === "propiedad") { $("#view").innerHTML = formPropiedad(null); return; }
   $("#view").innerHTML = `<div class="choices">
     <button class="choice" data-act="ir-inscripcion"><b>Ofrezco un servicio</b><span class="muted">Cerrajería, pintura, fumigación, electricidad, mudanzas… Inscribite y cotizá los pedidos de tu zona.</span></button>
+    <button class="choice" data-act="ir-propiedad"><b>Soy propietario</b><span class="muted">Cargá tu edificio o barrio y sumá a la administración y a los vecinos.</span></button>
     <div class="choice"><b>Vivo o administro un edificio o barrio</b><span class="muted">La administración tiene que sumarte a tu propiedad. Pasale este email:</span><span class="mono">${esc(S.usuario.email || "")}</span><button class="btn sm" data-act="refrescar" style="align-self:flex-start">Ya me sumaron</button></div>
   </div>`;
 }
@@ -806,9 +913,14 @@ document.addEventListener("click", async (e) => {
     case "cancelar": ui.form = ui.opForm = ui.compraForm = null; return render();
     case "nuevo-reclamo": return abrirReclamo();
     case "nueva-compra": return abrirCompra();
+    case "nueva-prop": ui.nuevaProp = true; renderPersonas(); return $("#npNom").focus();
+    case "cancelar-prop": ui.nuevaProp = false; if (vista === "registro") { ui.form = null; return render(); } return renderPersonas();
+    case "quitar-persona": { const em = t.dataset.email; const ok = await correr("quitar_persona", { p_propiedad: ui.propPers, p_email: em }, "Listo, " + em + " ya no está en la propiedad"); if (ok) { delete personasCache[ui.propPers]; render(); } return; }
+    case "copiar-link": { const inp = $("#ivLink"); try { await navigator.clipboard.writeText(inp.value); toast("Link copiado"); } catch (e) { inp.select(); toast("Seleccioné el link: copialo con Ctrl+C"); } return; }
     case "ver-productos": ui.tab = "productos"; ui.rubroProd = t.dataset.rubro; document.body.classList.remove("detail"); render(); return window.scrollTo({ top: 0 });
     case "compra-producto": abrirCompra(); $("#ncCat").value = ui.rubroProd; $("#ncProd").value = capital(t.dataset.busqueda); $("#ncUni").focus(); return;
     case "ir-inscripcion": ui.form = "inscribirme"; return render();
+    case "ir-propiedad": ui.form = "propiedad"; return render();
     case "form-pres": ui.form = "pres"; renderDetalle(); return $("#pfProv").focus();
     case "form-desest": ui.form = "desest"; renderDetalle(); return $("#dsMot").focus();
     case "form-rech": ui.form = "rech:" + t.dataset.p; renderDetalle(); return $("#rcMot").focus();
@@ -847,6 +959,19 @@ document.addEventListener("submit", async (e) => {
       catch (err) { msg.textContent = "No pudimos enviar el link: " + err.message; }
       return;
     }
+    case "invitar": {
+      const email = v("ivEmail");
+      const r = await correr("invitar", { p_email: email, p_propiedad: ui.propPers, p_rol: v("ivRol"), p_unidad: v("ivUni") || null, p_nombre: v("ivNombre") || null },
+        (r) => r === "agregado" ? email + " ya tenía cuenta: quedó sumado a la propiedad" : "Invitación guardada. Cuando " + email + " entre con su email, va a ver la propiedad");
+      if (r) { delete personasCache[ui.propPers]; render(); }
+      return;
+    }
+    case "crear-prop": {
+      const id = await correr("crear_propiedad", { p_nombre: v("npNom"), p_tipo: v("npTipo"), p_zona: v("npZona"), p_region: v("npReg") }, "Propiedad creada");
+      if (id) { ui.nuevaProp = false; ui.propPers = id; render(); }
+      return;
+    }
+    case "editar-prop": return correr("editar_propiedad", { p_propiedad: ui.propPers, p_nombre: v("epNom"), p_tipo: v("epTipo"), p_zona: v("epZona"), p_region: v("epReg"), p_cotizacion_abierta: $("#epCot").checked }, "Propiedad actualizada");
     case "comentar": return correr("comentar", { p_reclamo: r.id, p_texto: v("cmTxt") });
     case "desest": return correr("desestimar_reclamo", { p_reclamo: r.id, p_motivo: v("dsMot") }, "Reclamo desestimado");
     case "rech": return correr("desestimar_presupuesto", { p_presupuesto: f.dataset.p, p_motivo: v("rcMot") }, "Presupuesto desestimado");
@@ -868,6 +993,7 @@ document.addEventListener("input", (e) => { if (e.target.id === "q") { ui.q = e.
 document.addEventListener("change", (e) => {
   if (e.target.id === "propSel") { ui.prop = e.target.value; ui.sel = null; const f = filtrados(); ui.sel = f[0] ? f[0].id : null; render(); }
   if (e.target.id === "catSel") { ui.cat = e.target.value; renderLista(); }
+  if (e.target.id === "propPersSel") { ui.propPers = e.target.value; ui.nuevaProp = false; renderPersonas(); }
   if (e.target.id === "nrCat" || e.target.id === "nrProp") hintReclamo();
 });
 ["#ovReclamo", "#ovCompra"].forEach((s) => $(s).addEventListener("click", (e) => { if (e.target === $(s)) $(s).hidden = true; }));

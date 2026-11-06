@@ -678,3 +678,122 @@ create table ml_config (
 );
 alter table ml_config enable row level security;
 revoke all on ml_config from anon, authenticated;
+
+-- ============================================================
+-- Personas: invitaciones por email y alta de propiedades
+-- ============================================================
+create table invitaciones (
+  id           uuid primary key default gen_random_uuid(),
+  email        text not null check (email = lower(trim(email))),
+  propiedad_id uuid not null references propiedades(id) on delete cascade,
+  rol          rol_usuario not null,
+  unidad       text,
+  invitado_por uuid references perfiles(id) on delete set null,
+  creado_en    timestamptz not null default now(),
+  unique (email, propiedad_id)
+);
+alter table invitaciones enable row level security;
+revoke all on invitaciones from anon, authenticated;
+
+-- Reemplaza crear_perfil: además aplica las invitaciones pendientes del email
+create or replace function crear_perfil() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into perfiles (id, nombre)
+  values (new.id, coalesce(new.raw_user_meta_data->>'nombre', split_part(new.email, '@', 1)))
+  on conflict (id) do nothing;
+  insert into membresias (usuario_id, propiedad_id, rol, unidad)
+  select new.id, i.propiedad_id, i.rol, i.unidad from invitaciones i where i.email = lower(new.email)
+  on conflict (usuario_id, propiedad_id) do nothing;
+  delete from invitaciones where email = lower(new.email);
+  return new;
+end $$;
+
+create or replace function _puede_gestionar(p_propiedad uuid, p_rol rol_usuario) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case mi_rol(p_propiedad)
+    when 'propietario' then true
+    when 'administracion' then p_rol = 'vecino'
+    else false end
+$$;
+
+create or replace function invitar(p_email text, p_propiedad uuid, p_rol rol_usuario, p_unidad text default null, p_nombre text default null)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare v_email text := lower(trim(p_email)); v_uid uuid;
+begin
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'El email no es válido'; end if;
+  if not _puede_gestionar(p_propiedad, p_rol) then raise exception 'Tu rol no permite sumar personas con ese rol'; end if;
+  select id into v_uid from auth.users where lower(email) = v_email;
+  if v_uid is not null then
+    insert into perfiles (id, nombre) values (v_uid, coalesce(nullif(trim(p_nombre), ''), split_part(v_email, '@', 1))) on conflict (id) do nothing;
+    if nullif(trim(p_nombre), '') is not null then update perfiles set nombre = trim(p_nombre) where id = v_uid and nombre = split_part(v_email, '@', 1); end if;
+    insert into membresias (usuario_id, propiedad_id, rol, unidad) values (v_uid, p_propiedad, p_rol, nullif(trim(p_unidad), ''))
+    on conflict (usuario_id, propiedad_id) do update set rol = excluded.rol, unidad = excluded.unidad;
+    return 'agregado';
+  end if;
+  insert into invitaciones (email, propiedad_id, rol, unidad, invitado_por)
+  values (v_email, p_propiedad, p_rol, nullif(trim(p_unidad), ''), auth.uid())
+  on conflict (email, propiedad_id) do update set rol = excluded.rol, unidad = excluded.unidad, invitado_por = excluded.invitado_por, creado_en = now();
+  return 'invitado';
+end $$;
+
+create or replace function miembros(p_propiedad uuid)
+returns table (email text, nombre text, rol rol_usuario, unidad text, pendiente boolean, soy_yo boolean)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if mi_rol(p_propiedad) not in ('propietario', 'administracion') then raise exception 'Solo propietario y administración ven las personas'; end if;
+  return query
+    select u.email::text, p.nombre, m.rol, m.unidad, false, m.usuario_id = auth.uid()
+      from membresias m join perfiles p on p.id = m.usuario_id join auth.users u on u.id = m.usuario_id
+     where m.propiedad_id = p_propiedad
+    union all
+    select i.email, null::text, i.rol, i.unidad, true, false from invitaciones i where i.propiedad_id = p_propiedad
+    order by 5, 3, 4;
+end $$;
+
+create or replace function quitar_persona(p_propiedad uuid, p_email text) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_email text := lower(trim(p_email)); v_uid uuid; v_rol rol_usuario;
+begin
+  select m.usuario_id, m.rol into v_uid, v_rol from membresias m join auth.users u on u.id = m.usuario_id
+   where m.propiedad_id = p_propiedad and lower(u.email) = v_email;
+  if v_uid is not null then
+    if v_uid = auth.uid() then raise exception 'No podés quitarte a vos mismo'; end if;
+    if not _puede_gestionar(p_propiedad, v_rol) then raise exception 'Tu rol no permite quitar a esta persona'; end if;
+    delete from membresias where usuario_id = v_uid and propiedad_id = p_propiedad;
+    return;
+  end if;
+  select rol into v_rol from invitaciones where email = v_email and propiedad_id = p_propiedad;
+  if v_rol is null then raise exception 'Esa persona no está en la propiedad'; end if;
+  if not _puede_gestionar(p_propiedad, v_rol) then raise exception 'Tu rol no permite quitar esta invitación'; end if;
+  delete from invitaciones where email = v_email and propiedad_id = p_propiedad;
+end $$;
+
+create or replace function crear_propiedad(p_nombre text, p_tipo text, p_zona text, p_region text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Iniciá sesión'; end if;
+  if coalesce(trim(p_nombre), '') = '' then raise exception 'Poné el nombre o la dirección de la propiedad'; end if;
+  insert into propiedades (nombre, tipo, zona, region)
+  values (trim(p_nombre), nullif(trim(p_tipo), ''), nullif(trim(p_zona), ''), coalesce(nullif(trim(p_region), ''), 'CABA'))
+  returning id into v_id;
+  insert into membresias (usuario_id, propiedad_id, rol) values (auth.uid(), v_id, 'propietario');
+  return v_id;
+end $$;
+
+create or replace function editar_propiedad(p_propiedad uuid, p_nombre text, p_tipo text, p_zona text, p_region text, p_cotizacion_abierta boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if mi_rol(p_propiedad) is distinct from 'propietario' then raise exception 'Solo el propietario edita la propiedad'; end if;
+  update propiedades set nombre = trim(p_nombre), tipo = nullif(trim(p_tipo), ''), zona = nullif(trim(p_zona), ''),
+         region = p_region, cotizacion_abierta = p_cotizacion_abierta where id = p_propiedad;
+end $$;
+
+revoke execute on function invitar(text, uuid, rol_usuario, text, text), miembros(uuid), quitar_persona(uuid, text),
+  crear_propiedad(text, text, text, text), editar_propiedad(uuid, text, text, text, text, boolean), _puede_gestionar(uuid, rol_usuario)
+  from public, anon;
+grant execute on function invitar(text, uuid, rol_usuario, text, text), miembros(uuid), quitar_persona(uuid, text),
+  crear_propiedad(text, text, text, text), editar_propiedad(uuid, text, text, text, text, boolean) to authenticated;
+revoke execute on function _puede_gestionar(uuid, rol_usuario), crear_perfil() from authenticated;
