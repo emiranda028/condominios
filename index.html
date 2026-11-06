@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8">
+<title>Condominios</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0B0D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@300;400;500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Condominios <span class="badge-demo" id="demoBadge" hidden>Modo demo</span></div>
+    <div class="seg" id="roleSeg" role="group" aria-label="Ver como" hidden></div>
+    <div class="user" id="userBox" hidden></div>
+  </header>
+
+  <section class="hero" id="hero" hidden><h1 id="heroTitle"></h1><p id="heroSub"></p></section>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Secciones" hidden></nav>
+  <main id="view"></main>
+  <div class="foot-note" id="footNote" hidden><span>Modo demo: los cambios quedan guardados solo en este navegador.</span><button class="linkbtn" id="resetBtn">Restablecer ejemplo</button></div>
+</div>
+
+<div class="overlay" id="ovReclamo" hidden>
+  <form class="modal" id="fReclamo">
+    <h2>Nuevo reclamo</h2>
+    <div class="grid2">
+      <div class="field"><label for="nrProp">Propiedad</label><select id="nrProp"></select></div>
+      <div class="field"><label for="nrUf">Unidad o lugar</label><input type="text" id="nrUf" placeholder="UF 7A, Hall PB, Lote 14" required></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="nrCat">Rubro</label><select id="nrCat"></select></div>
+      <div class="field"><label for="nrUrg">Urgencia</label><select id="nrUrg"><option value="baja">Baja</option><option value="media" selected>Media</option><option value="alta">Alta</option></select></div>
+    </div>
+    <div class="field"><label for="nrTit">Qué pasa</label><input type="text" id="nrTit" placeholder="Pierde agua el tanque de la terraza" required maxlength="90"></div>
+    <div class="field"><label for="nrDesc">Detalle</label><textarea id="nrDesc" placeholder="Dónde, desde cuándo, a quién afecta"></textarea></div>
+    <p class="muted" id="nrHint" style="margin:0;font-size:14px"></p>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-close="ovReclamo">Cancelar</button><button class="btn primary">Enviar reclamo</button></div>
+  </form>
+</div>
+
+<div class="overlay" id="ovCompra" hidden>
+  <form class="modal" id="fCompra">
+    <h2>Proponer compra en conjunto</h2>
+    <p class="muted" style="margin:0">Otros vecinos de tu zona se suman con su cantidad y los proveedores publican precios por volumen. Nadie ve tu nombre, solo tu barrio.</p>
+    <div class="field"><label for="ncProd">Qué quieren comprar o contratar</label><input type="text" id="ncProd" placeholder="Látex interior blanco mate 20 L" required maxlength="80"></div>
+    <div class="grid2">
+      <div class="field"><label for="ncCat">Rubro</label><select id="ncCat"></select></div>
+      <div class="field"><label for="ncUni">Unidad</label><input type="text" id="ncUni" placeholder="lata, m², casa, m³" required maxlength="20"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="ncCant">Cuántas necesitás vos</label><input type="number" id="ncCant" min="1" step="1" value="2" required></div>
+      <div class="field"><label for="ncCierre">Cierra el</label><input type="date" id="ncCierre" required></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="ncReg">Zona</label><select id="ncReg"></select></div>
+      <div class="field"><label for="ncBarrio">Tu barrio</label><input type="text" id="ncBarrio" placeholder="Caballito" maxlength="40"></div>
+    </div>
+    <div class="field"><label for="ncDet">Detalle</label><textarea id="ncDet" placeholder="Marca o calidad, entrega a domicilio, fecha tentativa"></textarea></div>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-close="ovCompra">Cancelar</button><button class="btn primary">Publicar compra</button></div>
+  </form>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
