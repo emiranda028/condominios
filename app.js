@@ -69,60 +69,79 @@ function ilustracion() {
     }
     return out;
   };
-  const arbol = (x, y, r) => `<rect class="trunk" x="${x - 2}" y="${y - 4}" width="4" height="16" rx="2"/><circle class="leaf" cx="${x}" cy="${y - r}" r="${r}"/>`;
-  return `<svg class="ilustra" viewBox="0 0 680 240" role="img" aria-label="Ilustración de un barrio con casas, edificios, pileta, parrilla y plaza">
+  const arbol = (x, y, r) => `<rect class="trunk" x="${x - 2.5}" y="${y - 6}" width="5" height="18" rx="2"/><circle class="leaf" cx="${x}" cy="${y - r - 2}" r="${r}"/><circle class="leaf-hi" cx="${x - r / 3}" cy="${y - r - 5}" r="${r / 2.2}"/>`;
+  const mata = (x) => `<path class="tuft" d="M${x} 236 l2 -7 l2 7 l2 -9 l2 9 l2 -6 l2 6"/>`;
+  const flor = (x, y, cl) => `<circle class="${cl}" cx="${x}" cy="${y}" r="2.2"/>`;
+  return `<svg class="ilustra" viewBox="0 0 800 270" role="img" aria-label="Ilustración de un barrio con casas, edificios, gimnasio, pileta, plaza y pasto">
     <defs>
       <linearGradient id="gRoof" x1="0" x2="1"><stop offset="0" stop-color="var(--grad-a)"/><stop offset="1" stop-color="var(--grad-c)"/></linearGradient>
-      <linearGradient id="gWater" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--grad-a)" stop-opacity=".85"/><stop offset="1" stop-color="var(--grad-a)" stop-opacity=".35"/></linearGradient>
+      <linearGradient id="gWater" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#5FB4FF"/><stop offset="1" stop-color="var(--grad-a)"/></linearGradient>
+      <linearGradient id="gLawn" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2F6B3F"/><stop offset="1" stop-color="#173A24"/></linearGradient>
+      <linearGradient id="gGlass" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="var(--grad-a)" stop-opacity=".45"/><stop offset="1" stop-color="var(--grad-c)" stop-opacity=".25"/></linearGradient>
     </defs>
-    <circle class="moon" cx="612" cy="38" r="14"/>
-    <circle class="star" cx="80" cy="28" r="1.6"/><circle class="star" cx="210" cy="14" r="1.2"/><circle class="star" cx="470" cy="22" r="1.4"/><circle class="star" cx="560" cy="70" r="1.1"/><circle class="star" cx="330" cy="10" r="1"/>
+    <circle class="moon" cx="752" cy="38" r="15"/>
+    ${[[60, 30, 1.6], [200, 16, 1.2], [420, 26, 1.4], [520, 60, 1.1], [360, 12, 1], [640, 22, 1.3], [700, 80, 1]].map(([x, y, r]) => `<circle class="star" cx="${x}" cy="${y}" r="${r}"/>`).join("")}
 
-    <!-- Torre alta -->
-    <rect class="bld" x="250" y="40" width="78" height="174" rx="4"/>
-    <rect class="roofline" x="250" y="40" width="78" height="5" rx="2"/>
-    <rect class="bld-dark" x="282" y="24" width="14" height="16"/>
-    ${ventanas(260, 56, 5, 11, 9, 8, 13.5, 13.6, 2)}
-    <!-- Edificio medio con balcones -->
-    <rect class="bld" x="336" y="86" width="96" height="128" rx="4"/>
-    <rect class="roofline" x="336" y="86" width="96" height="5" rx="2"/>
-    ${ventanas(348, 100, 4, 7, 14, 10, 20, 15.5, 5)}
-    ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<rect class="balcony" x="342" y="${111 + i * 15.5}" width="84" height="2"/>`).join("")}
     <!-- Edificio bajo atrás -->
-    <rect class="bld-dark" x="180" y="110" width="64" height="104" rx="3"/>
-    ${ventanas(190, 122, 3, 6, 10, 8, 16, 14.5, 1)}
+    <rect class="bld-dark" x="164" y="126" width="60" height="100" rx="3"/>
+    ${ventanas(173, 138, 3, 6, 10, 8, 16, 14.5, 1)}
+    <!-- Torre -->
+    <rect class="bld" x="230" y="46" width="78" height="180" rx="4"/>
+    <rect class="roofline" x="230" y="46" width="78" height="5" rx="2"/>
+    <rect class="bld-dark" x="262" y="30" width="14" height="16"/>
+    ${ventanas(240, 62, 5, 11, 9, 8, 13.5, 14, 2)}
+    <!-- Edificio con balcones -->
+    <rect class="bld" x="314" y="98" width="92" height="128" rx="4"/>
+    <rect class="roofline" x="314" y="98" width="92" height="5" rx="2"/>
+    ${ventanas(325, 112, 4, 7, 14, 10, 20, 15.5, 5)}
+    ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<rect class="balcony" x="320" y="${123 + i * 15.5}" width="80" height="2"/>`).join("")}
 
-    <!-- Casa con techo a dos aguas -->
-    <polygon class="roof" points="36,152 82,116 128,152"/>
-    <rect class="house" x="46" y="150" width="72" height="64"/>
-    <rect class="door" x="74" y="182" width="16" height="32" rx="2"/>
-    <rect class="w-on" x="54" y="164" width="14" height="12" rx="1.5"/><rect class="w-off" x="96" y="164" width="14" height="12" rx="1.5"/>
-    <rect class="bld-dark" x="104" y="122" width="8" height="18"/>
-    <!-- Segunda casa -->
-    <polygon class="roof" points="132,172 158,150 184,172"/>
-    <rect class="house" x="138" y="170" width="40" height="44"/>
-    <rect class="w-on w-tw" x="146" y="180" width="10" height="10" rx="1.5" style="animation-delay:2s"/><rect class="door" x="161" y="190" width="10" height="24" rx="2"/>
+    <!-- Casas -->
+    <polygon class="roof" points="18,172 60,138 102,172"/>
+    <rect class="house" x="26" y="170" width="68" height="56"/>
+    <rect class="bld-dark" x="78" y="144" width="8" height="18"/>
+    <rect class="door" x="52" y="196" width="16" height="30" rx="2"/>
+    <rect class="w-on" x="33" y="182" width="13" height="11" rx="1.5"/><rect class="w-off" x="74" y="182" width="13" height="11" rx="1.5"/>
+    <polygon class="roof" points="104,190 130,168 156,190"/>
+    <rect class="house" x="110" y="188" width="40" height="38"/>
+    <rect class="w-on w-tw" x="117" y="197" width="10" height="9" rx="1.5" style="animation-delay:2s"/><rect class="door" x="132" y="203" width="10" height="23" rx="2"/>
 
-    <!-- Parrilla / quincho -->
-    <polygon class="roof" points="440,176 470,160 500,176"/>
-    <rect class="house" x="446" y="175" width="48" height="39"/>
-    <rect class="bld-dark" x="478" y="150" width="9" height="22"/>
-    <g class="smoke"><circle cx="483" cy="142" r="4"/><circle cx="488" cy="132" r="5"/><circle cx="482" cy="121" r="6"/></g>
-    <rect class="grill" x="454" y="192" width="20" height="7" rx="2"/><line class="pole" x1="458" y1="199" x2="458" y2="214"/><line class="pole" x1="470" y1="199" x2="470" y2="214"/>
+    <!-- Gimnasio vidriado -->
+    <rect class="house" x="418" y="146" width="122" height="80" rx="4"/>
+    <rect class="roofline" x="414" y="142" width="130" height="6" rx="3"/>
+    <rect class="sign" x="448" y="128" width="62" height="14" rx="4"/>
+    <text class="sign-txt" x="479" y="138.5" text-anchor="middle">GIMNASIO</text>
+    <rect x="426" y="156" width="106" height="52" rx="3" fill="url(#gGlass)" stroke="var(--line)"/>
+    <line class="mullion" x1="461" y1="156" x2="461" y2="208"/><line class="mullion" x1="497" y1="156" x2="497" y2="208"/>
+    <!-- cinta -->
+    <path class="gym" d="M432 202 h22 l4 -3 M454 202 v-14 l5 -3"/><rect class="gym-fill" x="430" y="201" width="26" height="4" rx="2"/>
+    <!-- mancuerna en soporte -->
+    <rect class="gym-fill" x="469" y="187" width="4" height="10" rx="1"/><rect class="gym-fill" x="485" y="187" width="4" height="10" rx="1"/><line class="gym" x1="473" y1="192" x2="485" y2="192"/>
+    <line class="gym" x1="466" y1="204" x2="492" y2="204"/><line class="gym" x1="470" y1="204" x2="470" y2="198"/><line class="gym" x1="488" y1="204" x2="488" y2="198"/>
+    <!-- pelota y bicicleta fija -->
+    <circle class="gym-ball" cx="510" cy="199" r="6"/>
+    <path class="gym" d="M520 205 v-12 l7 -3 M517 205 h9 M524 193 h5"/>
+    <rect class="door" x="462" y="210" width="34" height="16" rx="2"/>
 
-    <!-- Pileta con reposera -->
-    <rect class="deck" x="506" y="198" width="104" height="16" rx="3"/>
-    <rect x="514" y="201" width="72" height="10" rx="5" fill="url(#gWater)"/>
-    <path class="wave" d="M520 206 q5 -3 10 0 t10 0 t10 0 t10 0 t10 0 t10 0"/>
-    <path class="pole" d="M590 214 v-16 M596 214 v-16 M590 202 h6 M590 207 h6"/>
-    <path class="lounger" d="M600 197 l8 -8 M596 197 h14"/>
-    <!-- Plaza: hamaca y árboles -->
-    <path class="pole" d="M622 214 L632 176 L642 214 M652 214 L642 176 M632 176 H642"/>
-    <line class="pole" x1="637" y1="178" x2="637" y2="200"/><rect class="seat" x="632" y="200" width="10" height="3" rx="1"/>
-    ${arbol(16, 202, 14)}${arbol(670, 200, 12)}${arbol(230, 206, 10)}
-    <!-- Suelo y caminito -->
-    <rect class="ground" x="0" y="214" width="680" height="26"/>
-    <path class="path" d="M82 214 C 120 228, 300 222, 340 232 S 560 226, 600 240"/>
+    <!-- Pileta -->
+    <rect class="deck" x="548" y="200" width="168" height="26" rx="4"/>
+    <rect x="558" y="205" width="134" height="16" rx="8" fill="url(#gWater)"/>
+    <path class="wave" d="M566 213 q6 -4 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0"/>
+    <path class="pole" d="M696 226 v-22 M703 226 v-22 M696 210 h7 M696 217 h7"/>
+    <!-- sombrilla y reposera -->
+    <line class="pole" x1="732" y1="226" x2="732" y2="182"/>
+    <path class="umbrella" d="M708 186 Q732 164 756 186 Z"/>
+    <path class="lounger" d="M716 222 h26 l8 -10 M720 222 v4 M740 222 v4"/>
+    <!-- Plaza: hamaca -->
+    <path class="pole" d="M762 226 L770 190 L778 226 M786 226 L778 190 M770 190 H778"/>
+    <line class="pole" x1="774" y1="192" x2="774" y2="212"/><rect class="seat" x="769" y="212" width="10" height="3" rx="1"/>
+
+    <!-- Pasto, caminito, árboles, matas y flores -->
+    <rect x="0" y="226" width="800" height="44" fill="url(#gLawn)"/>
+    <path class="path" d="M60 270 C 80 248, 140 240, 240 238 S 420 236, 479 228"/>
+    ${arbol(10, 228, 13)}${arbol(160, 230, 10)}${arbol(410, 230, 11)}${arbol(546, 232, 9)}${arbol(794, 232, 10)}
+    ${[30, 104, 196, 286, 344, 372, 520, 600, 650, 690, 740].map(mata).join("")}
+    ${[[120, 244, "fl-a"], [128, 250, "fl-b"], [300, 252, "fl-a"], [560, 248, "fl-b"], [612, 256, "fl-a"], [680, 246, "fl-b"], [720, 254, "fl-a"], [36, 256, "fl-b"]].map(([x, y, c]) => flor(x, y, c)).join("")}
   </svg>`;
 }
 

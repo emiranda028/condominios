@@ -60,21 +60,29 @@ a{color:var(--accent)}
 .ilustra .moon{fill:var(--ink);opacity:.9}
 .ilustra .star{fill:var(--ink);opacity:.6}
 .ilustra .trunk{fill:var(--raise)}
-.ilustra .leaf{fill:var(--ok);opacity:.55}
-.ilustra .ground{fill:var(--surface)}
-.ilustra .path{fill:none;stroke:var(--line);stroke-width:6;stroke-linecap:round}
-.ilustra .deck{fill:var(--raise)}
+.ilustra .leaf{fill:#3E8A52;opacity:.85}
+.ilustra .leaf-hi{fill:var(--ok);opacity:.35}
+.ilustra .tuft{fill:none;stroke:#5FAE6E;stroke-width:1.4;stroke-linejoin:round;opacity:.9}
+.ilustra .fl-a{fill:var(--warn)}
+.ilustra .fl-b{fill:var(--grad-c)}
+.ilustra .sign{fill:var(--accent-bg)}
+.ilustra .sign-txt{fill:var(--accent);font:600 8px var(--f-ui);letter-spacing:.12em}
+.ilustra .mullion{stroke:var(--line);stroke-width:1.5}
+.ilustra .gym{fill:none;stroke:var(--ink);stroke-opacity:.75;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ilustra .gym-fill{fill:var(--ink);opacity:.75}
+.ilustra .gym-ball{fill:var(--grad-c);opacity:.8}
+.ilustra .umbrella{fill:url(#gRoof)}
+.ilustra .path{fill:none;stroke:#8C8A7A;stroke-opacity:.45;stroke-width:7;stroke-linecap:round}
+.ilustra .deck{fill:#4A4740}
 .ilustra .wave{fill:none;stroke:var(--ink);stroke-opacity:.5;stroke-width:1.2}
 .ilustra .pole,.ilustra .lounger{fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round}
 .ilustra .seat{fill:var(--accent)}
 .ilustra .grill{fill:var(--muted)}
-.ilustra .smoke circle{fill:var(--muted);opacity:.25}
+
 @media (prefers-reduced-motion:no-preference){
   .ilustra .w-tw{animation:titila 6s ease-in-out infinite}
-  .ilustra .smoke{animation:humo 5s ease-in-out infinite;transform-origin:483px 150px}
 }
 @keyframes titila{0%,60%,100%{opacity:.85}70%,90%{opacity:.12}}
-@keyframes humo{0%,100%{transform:translateY(0);opacity:.9}50%{transform:translateY(-4px);opacity:.5}}
 .login-art{max-width:520px;margin:4vh auto 8px;padding-inline:8px}
 .hero h1{margin:0;font-weight:400;font-size:clamp(30px,5vw,46px);line-height:1.12;letter-spacing:-.02em;text-wrap:balance}
 .hero h1 .name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b) 55%,var(--grad-c));-webkit-background-clip:text;background-clip:text;color:transparent}
