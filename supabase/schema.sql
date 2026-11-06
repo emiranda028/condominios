@@ -823,3 +823,158 @@ begin
   end if;
   return new;
 end $$;
+
+-- ============================================================
+-- Eliminar reclamos, compras y propiedades
+-- ============================================================
+create or replace function eliminar_reclamo(p_reclamo bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare r reclamos; v rol_usuario;
+begin
+  select * into r from reclamos where id = p_reclamo for update;
+  if not found then raise exception 'El reclamo no existe'; end if;
+  v := mi_rol(r.propiedad_id);
+  if v is null then raise exception 'No pertenecés a esta propiedad'; end if;
+  if v = 'vecino' and (r.autor_id is distinct from auth.uid()
+      or exists (select 1 from presupuestos where reclamo_id = r.id and estado = 'aprobado')) then
+    raise exception 'Solo podés eliminar tus reclamos que todavía no tienen un presupuesto aprobado';
+  end if;
+  delete from reclamos where id = r.id;
+end $$;
+
+create or replace function eliminar_compra(p_compra bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from compras where id = p_compra and creador_id = auth.uid();
+  if not found then raise exception 'Solo quien creó la compra puede eliminarla'; end if;
+end $$;
+
+create or replace function eliminar_propiedad(p_propiedad uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if mi_rol(p_propiedad) is distinct from 'propietario' then raise exception 'Solo el propietario puede eliminar la propiedad'; end if;
+  delete from propiedades where id = p_propiedad;
+end $$;
+
+revoke execute on function eliminar_reclamo(bigint), eliminar_compra(bigint), eliminar_propiedad(uuid) from public, anon;
+grant execute on function eliminar_reclamo(bigint), eliminar_compra(bigint), eliminar_propiedad(uuid) to authenticated;
+
+-- ============================================================
+-- Panel del dueño: comunicado, observaciones internas, resolver, adjuntos
+-- ============================================================
+alter table reclamos add column comunicado_en timestamptz;
+alter table reclamos add column comunicado_nota text;
+
+alter table eventos add column interna boolean not null default false;
+drop policy "historial de mis props" on eventos;
+create policy "historial de mis props" on eventos for select using (
+  exists (select 1 from reclamos r where r.id = reclamo_id
+           and mi_rol(r.propiedad_id) is not null
+           and (not interna or mi_rol(r.propiedad_id) in ('propietario', 'administracion'))));
+
+drop function comentar(bigint, text);
+create or replace function comentar(p_reclamo bigint, p_texto text, p_interna boolean default false) returns void
+language plpgsql security definer set search_path = public as $$
+declare r reclamos;
+begin
+  r := _exigir(p_reclamo, case when p_interna then array['administracion', 'propietario']::rol_usuario[]
+                               else array['vecino', 'administracion', 'propietario']::rol_usuario[] end);
+  if coalesce(trim(p_texto), '') = '' then raise exception 'El comentario está vacío'; end if;
+  insert into eventos (reclamo_id, usuario_id, autor_nombre, texto, interna) values (p_reclamo, auth.uid(), mi_nombre(), trim(p_texto), p_interna);
+  update reclamos set actualizado_en = now() where id = p_reclamo;
+end $$;
+
+create or replace function marcar_comunicado(p_reclamo bigint, p_nota text default null, p_comunicado boolean default true) returns void
+language plpgsql security definer set search_path = public as $$
+declare r reclamos;
+begin
+  r := _exigir(p_reclamo, array['administracion', 'propietario']::rol_usuario[]);
+  update reclamos set comunicado_en = case when p_comunicado then now() end,
+                      comunicado_nota = case when p_comunicado then nullif(trim(p_nota), '') end
+   where id = p_reclamo;
+  perform _log(p_reclamo, case when p_comunicado then 'Marcó como comunicado' || coalesce(': ' || nullif(trim(p_nota), ''), '.')
+                               else 'Marcó como sin comunicar.' end);
+end $$;
+
+-- Reemplaza resolver_reclamo: propietario o administración, desde cualquier estado abierto
+create or replace function resolver_reclamo(p_reclamo bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare r reclamos;
+begin
+  r := _exigir(p_reclamo, array['administracion', 'propietario']::rol_usuario[]);
+  if r.estado in ('resuelto', 'desestimado') then raise exception 'El reclamo ya está cerrado'; end if;
+  update reclamos set estado = 'resuelto' where id = p_reclamo;
+  perform _log(p_reclamo, 'Marcó el reclamo como resuelto.');
+end $$;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('adjuntos', 'adjuntos', false, 10485760, array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/gif', 'application/pdf'])
+on conflict (id) do nothing;
+
+create or replace function puede_adjuntar(p_reclamo bigint) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from reclamos r where r.id = p_reclamo and mi_rol(r.propiedad_id) is not null)
+      or exists (select 1 from presupuestos q where q.reclamo_id = p_reclamo and q.proveedor_id = auth.uid())
+      or exists (select 1 from reclamos r join propiedades p on p.id = r.propiedad_id
+                   join proveedores pv on pv.id = auth.uid() and pv.activo
+                   join proveedor_rubros pr on pr.proveedor_id = pv.id and pr.rubro = r.rubro
+                  where r.id = p_reclamo and r.estado in ('presupuestando', 'aprobacion') and p.region = any(pv.zonas))
+$$;
+
+create or replace function _reclamo_de_ruta(p_name text) returns bigint
+language sql immutable set search_path = public as $$
+  select case when split_part(p_name, '/', 1) = 'reclamos' and split_part(p_name, '/', 2) ~ '^[0-9]+$'
+              then split_part(p_name, '/', 2)::bigint end
+$$;
+
+create policy "adjuntos: subir" on storage.objects for insert to authenticated
+  with check (bucket_id = 'adjuntos' and puede_adjuntar(_reclamo_de_ruta(name)) and owner_id = auth.uid()::text);
+create policy "adjuntos: ver" on storage.objects for select to authenticated
+  using (bucket_id = 'adjuntos' and puede_adjuntar(_reclamo_de_ruta(name)));
+create policy "adjuntos: borrar propios" on storage.objects for delete to authenticated
+  using (bucket_id = 'adjuntos' and owner_id = auth.uid()::text);
+
+create table adjuntos (
+  id             uuid primary key default gen_random_uuid(),
+  reclamo_id     bigint not null references reclamos(id) on delete cascade,
+  presupuesto_id uuid references presupuestos(id) on delete cascade,
+  ruta           text not null unique,
+  nombre         text not null,
+  tipo           text not null,
+  tamano         int,
+  subido_por     uuid references perfiles(id) on delete set null,
+  autor_nombre   text,
+  creado_en      timestamptz not null default now()
+);
+create index on adjuntos (reclamo_id);
+alter table adjuntos enable row level security;
+create policy "adjuntos visibles" on adjuntos for select using (
+  case when presupuesto_id is null then
+         exists (select 1 from reclamos r where r.id = reclamo_id and mi_rol(r.propiedad_id) is not null)
+         or subido_por = auth.uid()
+       else exists (select 1 from reclamos r where r.id = reclamo_id and mi_rol(r.propiedad_id) is not null)
+         or exists (select 1 from presupuestos q where q.id = presupuesto_id and q.proveedor_id = auth.uid())
+  end);
+
+create or replace function registrar_adjunto(p_reclamo bigint, p_ruta text, p_nombre text, p_tipo text, p_tamano int, p_presupuesto uuid default null)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if not puede_adjuntar(p_reclamo) then raise exception 'No podés adjuntar archivos a este reclamo'; end if;
+  if _reclamo_de_ruta(p_ruta) is distinct from p_reclamo then raise exception 'Ruta de archivo inválida'; end if;
+  if p_presupuesto is not null and not exists (
+      select 1 from presupuestos q where q.id = p_presupuesto and q.reclamo_id = p_reclamo
+        and (q.proveedor_id = auth.uid() or mi_rol((select propiedad_id from reclamos where id = p_reclamo)) in ('administracion', 'propietario'))) then
+    raise exception 'Solo quien cargó el presupuesto puede adjuntarle archivos';
+  end if;
+  insert into adjuntos (reclamo_id, presupuesto_id, ruta, nombre, tipo, tamano, subido_por, autor_nombre)
+  values (p_reclamo, p_presupuesto, p_ruta, p_nombre, p_tipo, p_tamano, auth.uid(), mi_nombre())
+  returning id into v_id;
+  insert into eventos (reclamo_id, usuario_id, autor_nombre, texto)
+  values (p_reclamo, auth.uid(), mi_nombre(), case when p_presupuesto is null then 'Adjuntó ' else 'Adjuntó al presupuesto ' end || p_nombre || '.');
+  return v_id;
+end $$;
+
+revoke execute on function comentar(bigint, text, boolean), marcar_comunicado(bigint, text, boolean), registrar_adjunto(bigint, text, text, text, int, uuid), puede_adjuntar(bigint), _reclamo_de_ruta(text) from public, anon;
+grant execute on function comentar(bigint, text, boolean), marcar_comunicado(bigint, text, boolean), registrar_adjunto(bigint, text, text, text, int, uuid), puede_adjuntar(bigint), _reclamo_de_ruta(text) to authenticated;

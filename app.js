@@ -55,6 +55,23 @@ const plural = (n, a, b) => n + " " + (n === 1 ? a : b);
 const uni = (u, n) => (n === 1 || /[²³]$/.test(u) ? u : /[aeiouáéó]$/i.test(u) ? u + "s" : u + "es");
 const sumaDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoLocal(d); };
 
+const pad2 = (n) => String(n).padStart(2, "0");
+const hora = (iso) => { const d = new Date(iso); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
+const barrioDe = (p) => ((p && (p.zona || p.region)) || "").split(",")[0].trim();
+const waLink = (tel) => { let d = String(tel || "").replace(/\D/g, ""); if (!d) return null; if (!d.startsWith("54")) d = "549" + d.replace(/^0/, ""); return "https://wa.me/" + d; };
+const esImagen = (t) => /^image\//.test(t || "") || /^data:image\//.test(t || "");
+const adjUrls = {};
+async function achicarImagen(file) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1.2e6 || !window.createImageBitmap) return file;
+  try {
+    const img = await createImageBitmap(file), k = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.82));
+    return blob ? new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
+  } catch (e) { return file; }
+}
+
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 2800); }
 
 // ---------- Ilustración de portada: barrio de noche ----------
@@ -146,7 +163,8 @@ function ilustracion() {
 }
 
 // ---------- Estado de la interfaz ----------
-const ui = { rolDemo: "propietario", tab: null, prop: "all", filtro: "abiertos", q: "", cat: "", sel: null, form: null, opFiltro: "abiertos", opForm: null, compraForm: null, regionCompras: "todas", rubroProd: "Pintura", propPers: null, nuevaProp: false, busy: false };
+const ui = { rolDemo: "propietario", tab: null, prop: "all", filtro: "abiertos", q: "", cat: "", sel: null, form: null, opFiltro: "abiertos", opForm: null, compraForm: null, regionCompras: "todas", rubroProd: "Pintura", propPers: null, nuevaProp: false, busy: false,
+  pf: { desde: "", hasta: "", franja: "", barrio: "", prop: "", vecino: "", uf: "", rubro: "", estado: "", com: "" } };
 const personasCache = {};
 const productosCache = {};
 let S = { usuario: null, props: [], roles: {}, unidades: {}, reclamos: [], proveedor: null, oportunidades: [], compras: [], avisos: [] };
@@ -254,6 +272,15 @@ const Demo = {
   async crearPersona(a) {
     return this.run("invitar", { p_email: a.email, p_propiedad: a.propiedad, p_rol: a.rol, p_unidad: a.unidad, p_nombre: a.nombre }).then((r) => (r === "agregado" ? "agregado" : "creado"));
   },
+  async subirAdjunto(reclamoId, file, nombre, presId) {
+    if (file.size > 3e6) throw new Error("En el modo demo los archivos pueden pesar hasta 3 MB");
+    const url = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+    const r = this.d.reclamos.find((x) => x.id === reclamoId);
+    r.adj = r.adj || []; r.adj.push({ id: "a" + Date.now(), ruta: url, nombre, tipo: file.type, presId: presId || null, autor: this.yo().nombre, f: hoyISO() });
+    r.ev.push({ f: hoyISO(), q: this.yo().nombre, t: (presId ? "Adjuntó al presupuesto " : "Adjuntó ") + nombre + "." });
+    this.guardar();
+  },
+  async urls(rutas) { return Object.fromEntries(rutas.map((x) => [x, x])); },
   async miembros(prop) {
     const yo = this.yo();
     return clone(this.personas()[prop] || []).map((m) => ({ ...m, pendiente: !!m.pendiente, soy_yo: m.nombre === yo.nombre }));
@@ -267,7 +294,11 @@ const Demo = {
     props.forEach((p) => { roles[p.id] = rol; unidades[p.id] = yo.props[p.id]; });
     const pv = d.proveedores.find((p) => p.id === yo.id) || null;
     const proveedor = pv ? { razon: pv.razon, tel: pv.tel, rubros: pv.rubros.slice(), zonas: pv.zonas.slice(), cuit: pv.cuit || "", matricula: pv.matricula || "", descripcion: pv.descripcion || "" } : null;
-    const reclamos = clone(d.reclamos.filter((r) => r.prop in yo.props));
+    const reclamos = clone(d.reclamos.filter((r) => r.prop in yo.props)).map((r) => ({
+      ...r, adj: r.adj || [], autorId: r.autor === yo.nombre ? yo.id : null,
+      creado: r.creado || `${r.fecha}T${pad2((r.id * 7) % 24)}:${pad2((r.id * 13) % 60)}:00`,
+      comunicado: r.comunicado || null, comNota: r.comNota || null
+    }));
     // Oportunidades: mismo criterio que la función SQL
     let oportunidades = [];
     if (pv) {
@@ -313,7 +344,7 @@ const Demo = {
         d.reclamos.push(r); out = r.id; break;
       }
       case "pedir_presupuestos": { const r = R(a.p_reclamo); r.estado = "presupuestando"; const n = avisar(r); log(r, `Pidió presupuestos: ${plural(n, "proveedor inscripto", "proveedores inscriptos")} ${n === 1 ? "recibió" : "recibieron"} el aviso.`); break; }
-      case "cargar_presupuesto": { const r = R(a.p_reclamo); r.pres.push({ id: "q" + Date.now(), prov: a.p_proveedor, monto: a.p_monto, plazo: a.p_plazo, det: a.p_detalle, estado: "pendiente" }); r.estado = "aprobacion"; log(r, `Cargó presupuesto de ${a.p_proveedor} por ${ars(a.p_monto)}.`); break; }
+      case "cargar_presupuesto": { const r = R(a.p_reclamo); out = "q" + Date.now(); r.pres.push({ id: out, prov: a.p_proveedor, monto: a.p_monto, plazo: a.p_plazo, det: a.p_detalle, estado: "pendiente" }); r.estado = "aprobacion"; log(r, `Cargó presupuesto de ${a.p_proveedor} por ${ars(a.p_monto)}.`); break; }
       case "aprobar_presupuesto": {
         const r = d.reclamos.find((x) => x.pres.some((p) => p.id === a.p_presupuesto)); const p = r.pres.find((x) => x.id === a.p_presupuesto);
         p.estado = "aprobado";
@@ -331,7 +362,11 @@ const Demo = {
       case "resolver_reclamo": { const r = R(a.p_reclamo); r.estado = "resuelto"; log(r, "Marcó el reclamo como resuelto."); break; }
       case "reabrir_reclamo": { const r = R(a.p_reclamo); r.estado = r.pres.some((p) => p.estado === "aprobado") ? "en_curso" : "nuevo"; r.motivo = null; log(r, "Reabrió el reclamo."); break; }
       case "enviar_nota": { const r = R(a.p_reclamo); r.estado = "en_curso"; log(r, `Envió nota formal a ${r.uf} recordando el reglamento de copropiedad.`); break; }
-      case "comentar": { const r = R(a.p_reclamo); log(r, a.p_texto); break; }
+      case "comentar": { const r = R(a.p_reclamo); r.ev.push({ f: hoy, q: yo.nombre, t: a.p_texto, interna: !!a.p_interna }); break; }
+      case "marcar_comunicado": { const r = R(a.p_reclamo); r.comunicado = a.p_comunicado === false ? null : new Date().toISOString(); r.comNota = a.p_comunicado === false ? null : a.p_nota || null; log(r, a.p_comunicado === false ? "Marcó como sin comunicar." : "Marcó como comunicado" + (a.p_nota ? ": " + a.p_nota : ".")); break; }
+      case "eliminar_reclamo": { const r = R(a.p_reclamo); if (ui.rolDemo === "vecino" && (r.autor !== yo.nombre || r.pres.some((p) => p.estado === "aprobado"))) throw new Error("Solo podés eliminar tus reclamos que todavía no tienen un presupuesto aprobado"); d.reclamos = d.reclamos.filter((x) => x.id !== r.id); break; }
+      case "eliminar_compra": { const c = d.compras.find((x) => x.id === a.p_compra); if (!c || c.creador !== yo.id) throw new Error("Solo quien creó la compra puede eliminarla"); d.compras = d.compras.filter((x) => x !== c); d.ofertas = d.ofertas.filter((o) => o.compra !== c.id); break; }
+      case "eliminar_propiedad": { if (ui.rolDemo !== "propietario") throw new Error("Solo el propietario puede eliminar la propiedad"); d.props = d.props.filter((x) => x.id !== a.p_propiedad); d.reclamos = d.reclamos.filter((x) => x.prop !== a.p_propiedad); Object.values(DEMO_USERS).forEach((u) => delete u.props[a.p_propiedad]); break; }
       case "registrar_proveedor": {
         if (!a.p_razon_social || !a.p_telefono) throw new Error("Completá nombre comercial y teléfono");
         if (!a.p_rubros.length) throw new Error("Elegí al menos un rubro");
@@ -345,7 +380,8 @@ const Demo = {
         if (!["presupuestando", "aprobacion"].includes(r.estado)) throw new Error("Este pedido ya no recibe cotizaciones");
         if (r.pres.some((p) => p.provId === pvYo.id && p.estado !== "desestimado")) throw new Error("Ya cotizaste este pedido");
         if (!(a.p_monto > 0)) throw new Error("Indicá un monto válido");
-        r.pres.push({ id: "q" + Date.now(), provId: pvYo.id, contacto: pvYo.tel, prov: pvYo.razon, monto: a.p_monto, plazo: a.p_plazo, det: a.p_detalle, estado: "pendiente" });
+        out = "q" + Date.now();
+        r.pres.push({ id: out, provId: pvYo.id, contacto: pvYo.tel, prov: pvYo.razon, monto: a.p_monto, plazo: a.p_plazo, det: a.p_detalle, estado: "pendiente" });
         r.estado = "aprobacion"; log(r, `${pvYo.razon} cotizó ${ars(a.p_monto)} desde la plataforma.`); break;
       }
       case "marcar_avisos_leidos": d.avisos.forEach((x) => { if (x.u === yo.id) x.leido = true; }); break;
@@ -446,6 +482,18 @@ const Nube = {
     const { error } = await this.sb.auth.updateUser({ password });
     if (error) throw new Error(/different from the old/i.test(error.message) ? "La contraseña nueva tiene que ser distinta de la anterior" : error.message);
   },
+  async subirAdjunto(reclamoId, file, nombre, presId) {
+    if (file.size > 10485760) throw new Error(nombre + " pesa más de 10 MB");
+    const seguro = nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w.-]+/g, "_").slice(-60);
+    const ruta = `reclamos/${reclamoId}/${crypto.randomUUID()}-${seguro}`;
+    const { error } = await this.sb.storage.from("adjuntos").upload(ruta, file, { contentType: file.type });
+    if (error) throw new Error("No se pudo subir " + nombre + ": " + error.message);
+    await this.run("registrar_adjunto", { p_reclamo: reclamoId, p_ruta: ruta, p_nombre: nombre, p_tipo: file.type, p_tamano: file.size, p_presupuesto: presId || null });
+  },
+  async urls(rutas) {
+    const { data } = await this.sb.storage.from("adjuntos").createSignedUrls(rutas, 3600);
+    return Object.fromEntries((data || []).filter((x) => x.signedUrl).map((x) => [x.path, x.signedUrl]));
+  },
   async crearPersona(a) { return (await this.funcion("cuentas", { accion: "crear", ...a }, true)).estado; },
   async login(email) {
     const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
@@ -461,7 +509,7 @@ const Nube = {
       sb.from("membresias").select("propiedad_id,rol,unidad").eq("usuario_id", user.id),
       sb.from("propiedades").select("id,nombre,tipo,zona,region,cotizacion_abierta").order("nombre"),
       sb.from("rubros").select("nombre,requiere_presup").order("orden"),
-      sb.from("reclamos").select("*,presupuestos(*),eventos(*)").order("id", { ascending: false }),
+      sb.from("reclamos").select("*,presupuestos(*),eventos(*),adjuntos(*)").order("id", { ascending: false }),
       sb.from("proveedores").select("*").eq("id", user.id).maybeSingle(),
       sb.from("proveedor_rubros").select("rubro").eq("proveedor_id", user.id),
       sb.rpc("oportunidades"),
@@ -488,9 +536,11 @@ const Nube = {
       props: chk(props), roles, unidades,
       reclamos: chk(rec).map((r) => ({
         id: r.id, prop: r.propiedad_id, uf: r.ubicacion, cat: r.rubro, tit: r.titulo, desc: r.descripcion, autor: r.autor_nombre,
-        urg: r.urgencia, estado: r.estado, motivo: r.motivo, fecha: isoLocal(r.creado_en),
+        urg: r.urgencia, estado: r.estado, motivo: r.motivo, fecha: isoLocal(r.creado_en), creado: r.creado_en, autorId: r.autor_id,
+        comunicado: r.comunicado_en, comNota: r.comunicado_nota,
+        adj: (r.adjuntos || []).sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((a) => ({ id: a.id, ruta: a.ruta, nombre: a.nombre, tipo: a.tipo, presId: a.presupuesto_id, autor: a.autor_nombre, f: isoLocal(a.creado_en) })),
         pres: (r.presupuestos || []).sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((p) => ({ id: p.id, provId: p.proveedor_id, contacto: p.contacto, prov: p.proveedor, monto: +p.monto, plazo: p.plazo_dias, det: p.detalle, estado: p.estado, motivo: p.motivo })),
-        ev: (r.eventos || []).sort((a, b) => a.id - b.id).map((e) => ({ f: isoLocal(e.creado_en), q: e.autor_nombre, t: e.texto }))
+        ev: (r.eventos || []).sort((a, b) => a.id - b.id).map((e) => ({ f: isoLocal(e.creado_en), q: e.autor_nombre, t: e.texto, interna: e.interna }))
       })),
       proveedor: ficha && { razon: ficha.razon_social, tel: ficha.telefono, rubros: chk(pvr).map((x) => x.rubro), zonas: ficha.zonas || [], cuit: ficha.cuit || "", matricula: ficha.matricula || "", descripcion: ficha.descripcion || "" },
       oportunidades: (ops.error ? [] : ops.data).map((o) => ({
@@ -563,6 +613,7 @@ async function correr(fn, args, msg) {
 
 function tabsDisponibles() {
   const t = [];
+  if (propsGestion().length) t.push({ id: "panel", label: "Panel" });
   if (S.props.length) t.push({ id: "reclamos", label: "Reclamos" });
   if (S.proveedor) t.push({ id: "pedidos", label: "Pedidos para cotizar", badge: S.avisos.filter((a) => !a.leido).length });
   if (S.props.length || S.proveedor) t.push({ id: "compras", label: "Compras en conjunto" });
@@ -588,10 +639,21 @@ function render() {
   if (vista === "registro") return renderRegistro();
   if (!enApp) return;
   renderHero(); renderTabs();
-  ({ reclamos: renderReclamos, pedidos: renderPedidos, compras: renderCompras, inscripcion: renderInscripcion, productos: renderProductos, personas: renderPersonas })[ui.tab]();
+  ({ reclamos: renderReclamos, pedidos: renderPedidos, compras: renderCompras, inscripcion: renderInscripcion, productos: renderProductos, personas: renderPersonas, panel: renderPanel })[ui.tab]();
+  hidratarAdjuntos();
 }
 
+const ICONO_SOL = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>`;
+const ICONO_LUNA = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>`;
+const temaActual = () => document.documentElement.dataset.theme === "light" ? "light" : "dark";
+function botonTema() {
+  const b = $("#temaBtn"), claro = temaActual() === "light";
+  b.innerHTML = claro ? ICONO_LUNA : ICONO_SOL;
+  b.setAttribute("aria-label", claro ? "Cambiar a modo oscuro" : "Cambiar a modo claro");
+  b.title = b.getAttribute("aria-label");
+}
 function renderHeader() {
+  botonTema();
   const seg = $("#roleSeg"), box = $("#userBox");
   seg.hidden = !MODO_DEMO; box.hidden = MODO_DEMO || !S.usuario;
   if (MODO_DEMO) seg.innerHTML = `<span class="label" style="align-self:center;padding:0 8px 0 10px">Ver como</span>` + Object.keys(ROL_LABEL).map((k) => `<button data-rol="${k}" aria-pressed="${ui.rolDemo === k}">${ROL_LABEL[k]}</button>`).join("");
@@ -604,6 +666,10 @@ function renderHero() {
   const rol = rolPrincipal();
   const rs = S.reclamos.filter((r) => ui.prop === "all" || r.prop === ui.prop);
   if (ui.tab === "compras") sub = "Sumate a compras con vecinos de tu zona. Cuantos más se suman, más baja el precio por unidad.";
+  else if (ui.tab === "panel") {
+    const k = S.reclamos.filter((r) => r.estado === "aprobacion" && S.roles[r.prop] === "propietario").length;
+    sub = (k ? `Tenés ${plural(k, "reclamo", "reclamos")} esperando tu decisión. ` : "") + "Todo lo que pasa en tus propiedades, con filtros y estadísticas.";
+  }
   else if (ui.tab === "personas") sub = "Sumá vecinos, administración y propietarios a cada propiedad. Les creás la cuenta y les mandás sus datos para entrar.";
   else if (ui.tab === "productos") sub = "Lo que más se usa en cada arreglo, con precios de Mercado Libre. Si conviene comprar en cantidad, armá una compra en conjunto.";
   else if (ui.tab === "pedidos" || ui.tab === "inscripcion") {
@@ -619,7 +685,7 @@ function renderHero() {
     const k = rs.filter(abierto).length;
     sub = k ? `Hay ${plural(k, "reclamo abierto", "reclamos abiertos")} en tu edificio. Contá lo que pasa y lo seguís desde acá.` : "Todo en orden en tu edificio.";
   }
-  $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(n)}</span>. ${ui.tab === "compras" ? "¿Qué compramos juntos?" : ui.tab === "productos" ? "¿Qué te hace falta?" : ui.tab === "personas" ? "¿A quién sumamos?" : ui.tab === "pedidos" || ui.tab === "inscripcion" ? "¿Qué cotizamos hoy?" : "¿Qué resolvemos hoy?"}`;
+  $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(n)}</span>. ${ui.tab === "compras" ? "¿Qué compramos juntos?" : ui.tab === "productos" ? "¿Qué te hace falta?" : ui.tab === "personas" ? "¿A quién sumamos?" : ui.tab === "panel" ? "Este es tu panel." : ui.tab === "pedidos" || ui.tab === "inscripcion" ? "¿Qué cotizamos hoy?" : "¿Qué resolvemos hoy?"}`;
   $("#heroSub").textContent = sub;
   $("#heroArt").innerHTML = ilustracion();
 }
@@ -690,9 +756,15 @@ function renderLista() {
 function acciones(r) {
   const R = rolDe(r), b = []; let hint = "";
   const sinP = !requierePresup(r.cat);
+  const gestiona = R === "propietario" || R === "administracion";
+  const extra = [];
+  if (gestiona) extra.push(r.comunicado ? `<button class="btn sm ok" data-act="com-off" title="${esc(r.comNota || "")}">Comunicado ✓</button>` : `<button class="btn sm" data-act="form-com">Marcar comunicado</button>`);
+  const puedeBorrar = gestiona || (r.autorId && r.autorId === S.usuario.id && !r.pres.some((p) => p.estado === "aprobado"));
+  if (puedeBorrar) extra.push(`<button class="btn sm bad" data-act="form-eliminar">Eliminar</button>`);
   if (!abierto(r)) {
     hint = r.estado === "resuelto" ? "Reclamo cerrado como resuelto." : "Desestimado: " + esc(r.motivo || "");
-    if (R !== "vecino") b.push(`<button class="btn sm" data-act="reabrir">Reabrir</button>`);
+    if (gestiona) b.push(`<button class="btn sm" data-act="reabrir">Sin resolver · reabrir</button>`);
+    b.push(...extra);
     return { hint, b };
   }
   if (R === "vecino") hint = { nuevo: "La administración va a revisar tu reclamo.", presupuestando: "Publicado: los proveedores inscriptos ya pueden cotizar.", aprobacion: "Hay presupuestos esperando la aprobación del propietario.", en_curso: "El trabajo está en curso." }[r.estado];
@@ -704,14 +776,39 @@ function acciones(r) {
       if (r.estado === "aprobacion") hint = "Esperando la decisión del propietario.";
       if (["nuevo", "presupuestando", "aprobacion"].includes(r.estado)) b.push(`<button class="btn sm tonal" data-act="form-pres">Cargar presupuesto</button>`);
     }
-    if (r.estado === "en_curso") { hint = "Cuando el trabajo esté terminado, cerralo."; b.push(`<button class="btn sm primary" data-act="resolver">Marcar resuelto</button>`); }
+    if (r.estado === "en_curso") hint = "Cuando el trabajo esté terminado, cerralo.";
   }
   if (R === "propietario") {
     hint = { nuevo: "La administración todavía no lo publicó.", presupuestando: "Publicado: esperando cotizaciones.", aprobacion: "Elegí un presupuesto o desestimalo abajo.", en_curso: "Trabajo aprobado y en curso." }[r.estado];
     if (sinP) hint = "Reclamo de convivencia: lo gestiona la administración.";
   }
-  if (R !== "vecino") b.push(`<button class="btn sm bad" data-act="form-desest">Desestimar</button>`);
+  if (gestiona) b.push(`<button class="btn sm ${r.estado === "en_curso" ? "primary" : ""}" data-act="resolver">Resuelto</button>`, `<button class="btn sm bad" data-act="form-desest">Desestimar</button>`);
+  b.push(...extra);
   return { hint, b };
+}
+
+function adjuntosHtml(lista, vacio) {
+  if (!lista.length) return vacio ? `<p class="q-det" style="margin:0">${vacio}</p>` : "";
+  return `<div class="adjs">${lista.map((a) => esImagen(a.tipo)
+    ? `<a class="adj-img" href="#" data-ruta="${esc(a.ruta)}" target="_blank" rel="noopener" title="${esc(a.nombre)} · ${esc(a.autor || "")}"><img alt="${esc(a.nombre)}" data-ruta="${esc(a.ruta)}"></a>`
+    : `<a class="adj-doc" href="#" data-ruta="${esc(a.ruta)}" target="_blank" rel="noopener"><span class="adj-ico">PDF</span><span>${esc(a.nombre)}</span></a>`).join("")}</div>`;
+}
+function botonAdjuntar(reclamoId, presId, texto) {
+  const id = "f" + Math.random().toString(36).slice(2, 8);
+  return `<label class="btn sm" for="${id}">${texto}</label><input type="file" id="${id}" class="sr-only" multiple accept="image/*,application/pdf" data-adj="${reclamoId}" ${presId ? `data-pres="${presId}"` : ""}>`;
+}
+async function hidratarAdjuntos() {
+  const nodos = [...document.querySelectorAll("[data-ruta]")];
+  const faltan = [...new Set(nodos.map((n) => n.dataset.ruta).filter((x) => !adjUrls[x]))];
+  if (faltan.length) { try { Object.assign(adjUrls, await DB.urls(faltan)); } catch (e) {} }
+  nodos.forEach((n) => { const u = adjUrls[n.dataset.ruta]; if (!u) return; if (n.tagName === "IMG") n.src = u; else n.href = u; });
+}
+async function subirArchivos(reclamoId, files, presId) {
+  files = [...files]; if (!files.length) return;
+  toast("Subiendo " + plural(files.length, "archivo", "archivos") + "…");
+  let ok = 0;
+  for (const f of files) { try { await DB.subirAdjunto(reclamoId, await achicarImagen(f), f.name, presId); ok++; } catch (e) { toast(e.message); } }
+  if (ok) { await recargar(); toast(ok === 1 ? "Archivo adjuntado" : plural(ok, "archivo adjuntado", "archivos adjuntados")); }
 }
 
 function renderDetalle() {
@@ -719,7 +816,8 @@ function renderDetalle() {
   if (!r) { el.innerHTML = `<div class="placeholder">Elegí un reclamo de la lista para ver el detalle.</div>`; return; }
   const R = rolDe(r), { hint, b } = acciones(r), sinP = !requierePresup(r.cat);
   const pend = r.pres.filter((p) => p.estado === "pendiente"), min = pend.length > 1 ? Math.min(...pend.map((p) => p.monto)) : null;
-  const verContacto = R !== "vecino";
+  const verContacto = R !== "vecino", gestiona = R === "propietario" || R === "administracion";
+  const adjR = (r.adj || []).filter((a) => !a.presId);
   el.innerHTML = `<div class="detail">
     <button class="btn sm back" data-act="volver">← Reclamos</button>
     <div class="d-head">
@@ -728,29 +826,37 @@ function renderDetalle() {
       <div class="d-meta"><span>${esc(propNombre(r.prop))} · ${esc(r.uf)}</span><span>Reportó ${esc(r.autor)}</span><span>${fLarga(r.fecha)}</span></div>
     </div>
     ${r.desc ? `<p class="d-desc">${esc(r.desc)}</p>` : ""}
+    ${r.comunicado ? `<p class="q-det" style="margin:0">Comunicado el ${fLarga(isoLocal(r.comunicado))}${r.comNota ? ": " + esc(r.comNota) : ""}</p>` : ""}
     <div class="actions"><span class="hint">${hint || ""}</span>${b.join("")}</div>
+    ${ui.form === "com" ? `<form class="inline-form" data-form="comunicado"><label class="label" for="coNota">Con quién y qué se habló (opcional)</label><input type="text" id="coNota" placeholder="Llamé al proveedor, arranca el lunes"><div class="row"><button class="btn sm primary">Marcar comunicado</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></form>` : ""}
+    ${ui.form === "eliminar" ? `<div class="inline-form" role="alert"><b>¿Eliminar R-${r.id}?</b><span class="q-det">Se borran también sus presupuestos, adjuntos e historial. No se puede deshacer.</span><div class="row"><button class="btn sm bad" data-act="confirmar-eliminar">Sí, eliminar</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></div>` : ""}
+    <section><div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Fotos y archivos</h3>${botonAdjuntar(r.id, null, "Adjuntar fotos o PDF")}</div>${adjuntosHtml(adjR, "Todavía no hay fotos. Sumalas para que se entienda mejor el problema.")}</section>
     ${ui.form === "desest" ? `<form class="inline-form" data-form="desest"><label class="label" for="dsMot">Motivo</label><input type="text" id="dsMot" required placeholder="Corresponde a la unidad, no al consorcio"><div class="row"><button class="btn sm bad">Desestimar reclamo</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></form>` : ""}
     ${sinP ? "" : `<section><h3>Presupuestos</h3><div class="quotes">
       ${r.pres.length ? r.pres.map((p) => `<div class="quote ${p.estado}">
-        <div><div class="q-name">${esc(p.prov)}${p.provId ? `<span class="via">Cotizó en la plataforma</span>` : ""}</div><div class="q-det">${esc(p.det || "")}</div>${p.contacto && verContacto ? `<div class="q-det mono">Tel. ${esc(p.contacto)}</div>` : ""}</div>
+        <div><div class="q-name">${esc(p.prov)}${p.provId ? `<span class="via">Cotizó en la plataforma</span>` : ""}</div><div class="q-det">${esc(p.det || "")}</div>${p.contacto && verContacto ? `<div class="q-det mono">Tel. ${esc(p.contacto)}</div>` : ""}
+          ${adjuntosHtml((r.adj || []).filter((a) => a.presId === p.id))}</div>
         <div><div class="q-amt">${ars(p.monto)}</div><div class="q-sub">${p.plazo ? plural(p.plazo, "día", "días") + " de trabajo" : ""}</div></div>
         <div class="q-foot">
           <span class="pill e-${p.estado}">${EST_PRES[p.estado]}</span>${p.estado === "desestimado" && p.motivo ? `<span class="q-det">${esc(p.motivo)}</span>` : ""}
           ${p.monto === min && p.estado === "pendiente" ? `<span class="best">Más bajo</span>` : ""}
-          ${R === "propietario" && p.estado === "pendiente" && abierto(r) ? `<span class="push"><button class="btn sm ok" data-act="aprobar" data-p="${p.id}">Aprobar</button><button class="btn sm bad" data-act="form-rech" data-p="${p.id}">Desestimar</button></span>` : ""}
+          <span class="push">${gestiona && waLink(p.contacto) ? `<a class="btn sm" href="${waLink(p.contacto)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}${gestiona && !p.provId ? botonAdjuntar(r.id, p.id, "Adjuntar PDF") : ""}
+          ${R === "propietario" && p.estado === "pendiente" && abierto(r) ? `<button class="btn sm ok" data-act="aprobar" data-p="${p.id}">Aprobar</button><button class="btn sm bad" data-act="form-rech" data-p="${p.id}">Desestimar</button>` : ""}</span>
         </div>
         ${ui.form === "rech:" + p.id ? `<form class="inline-form" data-form="rech" data-p="${p.id}"><label class="label" for="rcMot">Motivo</label><input type="text" id="rcMot" required placeholder="Precio alto, pedir otra cotización"><div class="row"><button class="btn sm bad">Desestimar presupuesto</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></form>` : ""}
       </div>`).join("") : `<div class="q-det">${r.estado === "presupuestando" ? "Publicado a los proveedores inscriptos. Las cotizaciones aparecen acá apenas llegan." : "Todavía no hay presupuestos."}</div>`}
       ${ui.form === "pres" ? `<form class="inline-form" data-form="pres"><span class="label">Presupuesto de un proveedor propio</span>
         <div class="grid3"><input type="text" id="pfProv" placeholder="Proveedor" required aria-label="Proveedor"><input type="number" id="pfMonto" placeholder="Monto $" min="1" required aria-label="Monto"><input type="number" id="pfPlazo" placeholder="Días" min="1" value="3" aria-label="Días de trabajo"></div>
         <textarea id="pfDet" placeholder="Qué incluye y qué no" aria-label="Detalle"></textarea>
+        <div class="field"><label for="pfFile" class="label">PDF o imagen del presupuesto (opcional)</label><input type="file" id="pfFile" multiple accept="application/pdf,image/*"></div>
         <div class="row"><button class="btn sm primary">Enviar al propietario</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></form>` : ""}
     </div></section>`}
     ${BUSQUEDAS[r.cat] ? `<section><h3>Materiales frecuentes</h3><div class="row">${BUSQUEDAS[r.cat].slice(0, 4).map((b) => `<a class="chip" href="${linkListado(b)}" target="_blank" rel="noopener">${esc(capital(b))} ↗</a>`).join("")}<button class="linkbtn" data-act="ver-productos" data-rubro="${esc(r.cat)}">Ver precios</button></div></section>` : ""}
     <section><h3>Seguimiento</h3><ul class="timeline">
-      ${r.ev.map((e) => `<li><span class="mono tl-date">${fd(e.f)}</span><span><span class="tl-who">${esc(e.q)}</span> · ${esc(e.t)}</span></li>`).join("")}
+      ${r.ev.map((e) => `<li class="${e.interna ? "interna" : ""}"><span class="mono tl-date">${fd(e.f)}</span><span>${e.interna ? `<span class="pill e-aprobacion" style="margin-right:6px">Interna</span>` : ""}<span class="tl-who">${esc(e.q)}</span> · ${esc(e.t)}</span></li>`).join("")}
     </ul>
-    <form class="compose" data-form="comentar"><input type="text" id="cmTxt" placeholder="Escribí un comentario" aria-label="Comentario" required><button class="btn">Enviar</button></form></section>
+    <form class="compose" data-form="comentar"><input type="text" id="cmTxt" placeholder="${gestiona ? "Escribí una observación o comentario" : "Escribí un comentario"}" aria-label="Comentario" required><button class="btn">Enviar</button></form>
+    ${gestiona ? `<label class="row" style="gap:8px;font-size:14px;margin-top:8px"><input type="checkbox" id="cmInt"> Observación interna: solo la ven el propietario y la administración</label>` : ""}</section>
   </div>`;
 }
 
@@ -787,6 +893,7 @@ function cardPedido(o) {
     ${form ? `<form class="inline-form" data-form="cotizar" data-r="${o.id}">
         <div class="grid2"><div class="field"><label for="ctMonto">Monto total $</label><input type="number" id="ctMonto" min="1" required></div><div class="field"><label for="ctPlazo">Días de trabajo</label><input type="number" id="ctPlazo" min="1" value="1"></div></div>
         <div class="field"><label for="ctDet">Qué incluye</label><textarea id="ctDet" placeholder="Materiales, mano de obra, garantía"></textarea></div>
+        <div class="field"><label for="ctFile">PDF o imagen del presupuesto (opcional)</label><input type="file" id="ctFile" multiple accept="application/pdf,image/*"></div>
         <div class="row"><button class="btn sm primary">Enviar cotización</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></form>` : ""}
     <div class="foot"><span class="muted" style="font-size:14px">${o.n ? plural(o.n, "cotización recibida", "cotizaciones recibidas") : "Todavía nadie cotizó"}</span>
       ${!o.mi && !form ? `<span class="push"><button class="btn sm primary" data-act="form-cot" data-r="${o.id}">Cotizar</button></span>` : ""}</div>
@@ -863,8 +970,10 @@ function cardCompra(c) {
         ${abiertaC && puedeSumarse && !f ? (c.mi ? `<button class="btn sm" data-act="salir-compra" data-c="${c.id}">Salir</button><button class="btn sm tonal" data-act="form-sumar" data-c="${c.id}">Cambiar cantidad</button>` : `<button class="btn sm primary" data-act="form-sumar" data-c="${c.id}">Sumarme</button>`) : ""}
         ${abiertaC && esProv && !f ? `<button class="btn sm ${miOferta ? "tonal" : "primary"}" data-act="form-ofertar" data-c="${c.id}">${miOferta ? "Editar precios" : "Ofertar precios"}</button>` : ""}
         ${abiertaC && c.soyCreador && !f ? `<button class="btn sm" data-act="cerrar-compra" data-c="${c.id}">Cerrar compra</button>` : ""}
+        ${c.soyCreador && !f ? `<button class="btn sm bad" data-act="form-elim-compra" data-c="${c.id}">Eliminar</button>` : ""}
       </span>
     </div>
+    ${f === "eliminar" ? `<div class="inline-form" role="alert"><b>¿Eliminar esta compra?</b><span class="q-det">Se borran los participantes y las ofertas. No se puede deshacer.</span><div class="row"><button class="btn sm bad" data-act="eliminar-compra" data-c="${c.id}">Sí, eliminar</button><button class="btn sm" data-act="cancelar">Cancelar</button></div></div>` : ""}
   </article>`;
 }
 
@@ -896,6 +1005,155 @@ function cuerpoProductos(d) {
         <span class="row" style="gap:6px">${it.envio_gratis ? `<span class="save">Envío gratis</span>` : ""}${it.tienda_oficial ? `<span class="zona">Tienda oficial</span>` : ""}</span>
       </a>`).join("")}</div>` : ""}
   </section>`).join("")}</div>`;
+}
+
+// ---------- Panel del dueño ----------
+const FRANJAS = { manana: "Mañana (6 a 12 h)", tarde: "Tarde (12 a 19 h)", noche: "Noche (19 a 6 h)" };
+const franjaDe = (iso) => { const h = new Date(iso).getHours(); return h >= 6 && h < 12 ? "manana" : h >= 12 && h < 19 ? "tarde" : "noche"; };
+const aprobadoDe = (r) => r.pres.filter((p) => p.estado === "aprobado").reduce((a, p) => a + p.monto, 0);
+const diasResolucion = (r) => {
+  if (r.estado !== "resuelto") return null;
+  const e = [...r.ev].reverse().find((x) => /^Marcó el reclamo como resuelto/.test(x.t)) || r.ev[r.ev.length - 1];
+  if (!e) return null;
+  const [a, b] = [r.fecha, e.f].map((x) => { const [y, m, d] = x.split("-").map(Number); return new Date(y, m - 1, d); });
+  return Math.max(0, Math.round((b - a) / 86400000));
+};
+function reclamosPanel() {
+  const f = ui.pf, ids = new Set(propsGestion().map((p) => p.id));
+  return S.reclamos.filter((r) => {
+    if (!ids.has(r.prop)) return false;
+    const p = S.props.find((x) => x.id === r.prop);
+    if (f.desde && r.fecha < f.desde) return false;
+    if (f.hasta && r.fecha > f.hasta) return false;
+    if (f.franja && franjaDe(r.creado) !== f.franja) return false;
+    if (f.barrio && barrioDe(p) !== f.barrio) return false;
+    if (f.prop && r.prop !== f.prop) return false;
+    if (f.vecino && r.autor !== f.vecino) return false;
+    if (f.uf && !(r.uf || "").toLowerCase().includes(f.uf.toLowerCase())) return false;
+    if (f.rubro && r.cat !== f.rubro) return false;
+    if (f.estado === "abiertos" ? !abierto(r) : f.estado && r.estado !== f.estado) return false;
+    if (f.com === "si" && !r.comunicado) return false;
+    if (f.com === "no" && r.comunicado) return false;
+    return true;
+  }).sort((a, b) => (b.creado || b.fecha).localeCompare(a.creado || a.fecha));
+}
+function barras(items, fmt, cls) {
+  if (!items.length) return `<p class="q-det">Sin datos para estos filtros.</p>`;
+  const max = Math.max(1, ...items.map((i) => i.v));
+  return `<ul class="bars">${items.map((i) => `<li><span class="bar-l" title="${esc(i.k)}">${esc(i.k)}</span><span class="bar-t"><span class="bar-f ${i.cls || cls || ""}" style="width:${Math.max(2, (i.v / max) * 100)}%"></span></span><span class="bar-v">${fmt(i.v)}</span></li>`).join("")}</ul>`;
+}
+const agrupar = (lista, clave, valor) => { const m = new Map(); lista.forEach((x) => { const k = clave(x); if (k == null) return; m.set(k, (m.get(k) || 0) + valor(x)); }); return [...m].map(([k, v]) => ({ k, v })); };
+const opciones = (vals, sel, todos) => `<option value="">${todos}</option>` + vals.map(([v, l]) => `<option value="${esc(v)}" ${sel === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+
+function renderPanel() {
+  const ps = propsGestion(), f = ui.pf, rs = reclamosPanel();
+  const todos = S.reclamos.filter((r) => ps.some((p) => p.id === r.prop));
+  const barrios = [...new Set(ps.map(barrioDe).filter(Boolean))].sort();
+  const vecinos = [...new Set(todos.map((r) => r.autor).filter(Boolean))].sort();
+  const rubros = [...new Set(todos.map((r) => r.cat))].sort();
+  const ab = rs.filter(abierto), decidir = rs.filter((r) => r.estado === "aprobacion");
+  const sinCom = ab.filter((r) => !r.comunicado), gasto = rs.reduce((a, r) => a + aprobadoDe(r), 0);
+  const tiempos = rs.map(diasResolucion).filter((x) => x != null);
+  const prom = tiempos.length ? tiempos.reduce((a, b) => a + b, 0) / tiempos.length : null;
+  const hayFiltro = Object.values(f).some(Boolean);
+  const esProp = (r) => S.roles[r.prop] === "propietario";
+
+  // Estadísticas
+  const porRubro = agrupar(rs, (r) => r.cat, aprobadoDe).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+  const porProp = agrupar(rs, (r) => propNombre(r.prop), aprobadoDe).sort((a, b) => b.v - a.v);
+  const ordenEst = ["nuevo", "presupuestando", "aprobacion", "en_curso", "resuelto", "desestimado"];
+  const porEstado = ordenEst.map((e) => ({ k: ESTADOS[e], v: rs.filter((r) => r.estado === e).length, cls: "e-" + e })).filter((x) => x.v);
+  const meses = [];
+  for (let i = 5; i >= 0; i--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); meses.push(d.toLocaleDateString("sv-SE").slice(0, 7)); }
+  const nomMes = (k) => { const [y, m] = k.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleDateString("es-AR", { month: "short", year: "2-digit" }); };
+  const porMes = meses.map((k) => ({ k: nomMes(k), v: rs.filter((r) => r.fecha.startsWith(k)).length }));
+  const gastoMes = meses.map((k) => ({ k: nomMes(k), v: rs.filter((r) => r.fecha.startsWith(k)).reduce((a, r) => a + aprobadoDe(r), 0) }));
+  const porFranja = Object.entries(FRANJAS).map(([k, l]) => ({ k: l.split(" (")[0], v: rs.filter((r) => franjaDe(r.creado) === k).length }));
+  const tiempoRubro = agrupar(rs.filter((r) => diasResolucion(r) != null), (r) => r.cat, (r) => diasResolucion(r));
+  const cantRubro = agrupar(rs.filter((r) => diasResolucion(r) != null), (r) => r.cat, () => 1);
+  const promRubro = tiempoRubro.map((x) => ({ k: x.k, v: x.v / cantRubro.find((c) => c.k === x.k).v })).sort((a, b) => b.v - a.v);
+  const provs = new Map();
+  rs.forEach((r) => r.pres.forEach((q) => {
+    const x = provs.get(q.prov) || { n: 0, g: 0, monto: 0, plat: !!q.provId };
+    x.n++; if (q.estado === "aprobado") { x.g++; x.monto += q.monto; } provs.set(q.prov, x);
+  }));
+  const tablaProv = [...provs].sort((a, b) => b[1].monto - a[1].monto || b[1].n - a[1].n);
+
+  $("#view").innerHTML = `<div class="wrap" style="gap:16px">
+    <div class="stats">
+      <div class="stat ${decidir.some(esProp) ? "hot" : ""}"><span class="label">Para decidir</span><b>${decidir.length}</b><small>${decidir.length ? ars(decidir.reduce((a, r) => { const v = r.pres.filter((p) => p.estado === "pendiente").map((p) => p.monto); return a + (v.length ? Math.min(...v) : 0); }, 0)) + " con la opción más baja" : "nada pendiente"}</small></div>
+      <div class="stat"><span class="label">Abiertos</span><b>${ab.length}</b><small>${ab.filter((r) => r.urg === "alta").length} con urgencia alta</small></div>
+      <div class="stat ${sinCom.length ? "hot" : ""}"><span class="label">Sin comunicar</span><b>${sinCom.length}</b><small>abiertos sin contacto registrado</small></div>
+      <div class="stat"><span class="label">Gasto aprobado</span><b>${ars(gasto)}</b><small>${hayFiltro ? "con los filtros aplicados" : "en todos los reclamos"}</small></div>
+      <div class="stat"><span class="label">Resolución</span><b>${prom == null ? "—" : num(Math.round(prom * 10) / 10) + " d"}</b><small>promedio en ${plural(tiempos.length, "reclamo resuelto", "reclamos resueltos")}</small></div>
+    </div>
+
+    <section class="card filters" aria-label="Filtros">
+      <div class="row" style="justify-content:space-between"><h3 style="margin:0">Filtros</h3>${hayFiltro ? `<button class="linkbtn" data-act="limpiar-filtros">Limpiar filtros</button>` : ""}</div>
+      <div class="pf-grid">
+        <div class="field"><label for="pfDesde">Desde</label><input type="date" id="pfDesde" data-pf="desde" value="${esc(f.desde)}"></div>
+        <div class="field"><label for="pfHasta">Hasta</label><input type="date" id="pfHasta" data-pf="hasta" value="${esc(f.hasta)}"></div>
+        <div class="field"><label for="pfFranja">Horario</label><select id="pfFranja" data-pf="franja">${opciones(Object.entries(FRANJAS), f.franja, "Todo el día")}</select></div>
+        <div class="field"><label for="pfBarrio">Barrio</label><select id="pfBarrio" data-pf="barrio">${opciones(barrios.map((b) => [b, b]), f.barrio, "Todos")}</select></div>
+        <div class="field"><label for="pfProp">Residencia</label><select id="pfProp" data-pf="prop">${opciones(ps.map((p) => [p.id, p.nombre]), f.prop, "Todas")}</select></div>
+        <div class="field"><label for="pfVecino">Vecino</label><select id="pfVecino" data-pf="vecino">${opciones(vecinos.map((v) => [v, v]), f.vecino, "Todos")}</select></div>
+        <div class="field"><label for="pfUf">UF / lugar</label><input type="text" id="pfUf" data-pf="uf" value="${esc(f.uf)}" placeholder="7A, Lote 14, Hall"></div>
+        <div class="field"><label for="pfRubro">Rubro</label><select id="pfRubro" data-pf="rubro">${opciones(rubros.map((r) => [r, r]), f.rubro, "Todos")}</select></div>
+        <div class="field"><label for="pfEstado">Estado</label><select id="pfEstado" data-pf="estado">${opciones([["abiertos", "Abiertos (sin resolver)"], ...ordenEst.map((e) => [e, ESTADOS[e]])], f.estado, "Todos")}</select></div>
+        <div class="field"><label for="pfCom">Comunicado</label><select id="pfCom" data-pf="com">${opciones([["si", "Comunicado"], ["no", "Sin comunicar"]], f.com, "Todos")}</select></div>
+      </div>
+      <span class="muted" style="font-size:13.5px">${plural(rs.length, "reclamo", "reclamos")} ${hayFiltro ? "con estos filtros" : "en total"}</span>
+    </section>
+
+    ${decidir.length ? `<section class="wrap" style="gap:12px"><h3 style="margin:0">Para decidir</h3>
+      <div class="cards">${decidir.map((r) => {
+        const pend = r.pres.filter((p) => p.estado === "pendiente"), min = pend.length > 1 ? Math.min(...pend.map((p) => p.monto)) : null;
+        return `<article class="card op">
+          <div class="row"><span class="mono muted">R-${r.id}</span><span class="tag">${esc(r.cat)}</span><span class="tag">· ${esc(propNombre(r.prop))} · ${esc(r.uf)}</span></div>
+          <h4>${esc(r.tit)}</h4>
+          <p>${esc(r.autor || "")} · ${fLarga(r.fecha)} ${r.creado ? hora(r.creado) + " h" : ""}${(r.adj || []).filter((a) => !a.presId).length ? " · " + plural(r.adj.filter((a) => !a.presId).length, "foto o archivo", "fotos o archivos") : ""}</p>
+          <div class="wrap" style="gap:8px">${pend.map((q) => `<div class="decide">
+            <div><b>${esc(q.prov)}</b>${q.monto === min ? ` <span class="best">Más bajo</span>` : ""}<div class="q-det">${q.plazo ? plural(q.plazo, "día", "días") + " · " : ""}${esc(q.det || "")}</div>${adjuntosHtml((r.adj || []).filter((a) => a.presId === q.id))}</div>
+            <div class="q-amt">${ars(q.monto)}</div>
+            <div class="row" style="grid-column:1/-1">${waLink(q.contacto) ? `<a class="btn sm" href="${waLink(q.contacto)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+              ${esProp(r) ? `<span class="push row"><button class="btn sm ok" data-act="aprobar-panel" data-p="${q.id}">Aprobar</button><button class="btn sm bad" data-act="form-rech" data-p="${q.id}">Desestimar</button></span>` : `<span class="q-det push">Decide el propietario</span>`}</div>
+            ${ui.form === "rech:" + q.id ? `<form class="inline-form" data-form="rech" data-p="${q.id}"><label class="label" for="rcMot">Motivo</label><input type="text" id="rcMot" required placeholder="Precio alto, pedir otra cotización"><div class="row"><button class="btn sm bad">Desestimar presupuesto</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></form>` : ""}
+          </div>`).join("")}</div>
+          <div class="foot"><button class="linkbtn" data-act="ver-reclamo" data-id="${r.id}">Ver reclamo completo</button></div>
+        </article>`;
+      }).join("")}</div></section>` : ""}
+
+    <section class="card op" style="gap:10px"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Todos los reclamos</h3><span class="muted" style="font-size:13.5px">${plural(rs.length, "resultado", "resultados")}</span></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>Reclamo</th><th>Fecha</th><th>Residencia · UF</th><th>Vecino</th><th>Rubro</th><th>Estado</th><th>Comunicado</th><th class="num">Aprobado</th><th>Acciones</th></tr></thead>
+        <tbody>${rs.length ? rs.map((r) => `<tr>
+          <td><span class="mono muted">R-${r.id}</span><br><button class="linkbtn tbl-tit" data-act="ver-reclamo" data-id="${r.id}">${esc(r.tit)}</button></td>
+          <td class="nowrap">${fd(r.fecha)}<br><span class="muted">${r.creado ? hora(r.creado) + " h" : ""}</span></td>
+          <td>${esc(propNombre(r.prop))}<br><span class="muted">${esc(r.uf)}</span></td>
+          <td>${esc(r.autor || "")}</td>
+          <td>${esc(r.cat)}</td>
+          <td><span class="pill e-${r.estado}">${ESTADOS[r.estado]}</span></td>
+          <td>${r.comunicado ? `<button class="chip ok-chip" data-act="com-off" data-id="${r.id}" title="${esc(r.comNota || "Marcar como sin comunicar")}">Sí ✓</button>` : `<button class="chip" data-act="com-on" data-id="${r.id}">Marcar</button>`}</td>
+          <td class="num nowrap">${aprobadoDe(r) ? ars(aprobadoDe(r)) : "—"}</td>
+          <td class="nowrap">${abierto(r) ? `<button class="btn sm" data-act="resolver" data-id="${r.id}">Resuelto</button>` : `<button class="btn sm" data-act="reabrir" data-id="${r.id}">Sin resolver</button>`}</td>
+        </tr>`).join("") : `<tr><td colspan="9" class="empty">No hay reclamos con estos filtros.</td></tr>`}</tbody>
+      </table></div>
+    </section>
+
+    <div class="stat-grid">
+      <section class="card op"><h4>Gasto aprobado por rubro</h4>${barras(porRubro, ars)}</section>
+      <section class="card op"><h4>Gasto por residencia</h4>${barras(porProp, ars)}</section>
+      <section class="card op"><h4>Reclamos por estado</h4>${barras(porEstado, (v) => v)}</section>
+      <section class="card op"><h4>Reclamos por mes</h4>${barras(porMes, (v) => v)}</section>
+      <section class="card op"><h4>Gasto aprobado por mes</h4>${barras(gastoMes, ars)}</section>
+      <section class="card op"><h4>Horario en que se reclama</h4>${barras(porFranja, (v) => v)}</section>
+      <section class="card op"><h4>Días promedio hasta resolver</h4>${barras(promRubro, (v) => num(Math.round(v * 10) / 10) + " d")}</section>
+      <section class="card op"><h4>Proveedores</h4>${tablaProv.length ? `<div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>Proveedor</th><th class="num">Cotizó</th><th class="num">Ganó</th><th class="num">Adjudicado</th></tr></thead>
+        <tbody>${tablaProv.map(([n, x]) => `<tr><td>${esc(n)}${x.plat ? ` <span class="via">App</span>` : ""}</td><td class="num">${x.n}</td><td class="num">${x.g}</td><td class="num nowrap">${x.monto ? ars(x.monto) : "—"}</td></tr>`).join("")}</tbody>
+      </table></div>` : `<p class="q-det">Sin presupuestos para estos filtros.</p>`}</section>
+    </div>
+  </div>`;
 }
 
 // ---------- Personas y propiedades ----------
@@ -969,7 +1227,9 @@ function formPropiedad(p) {
       <div class="field"><label for="${id}Zona">Barrio</label><input type="text" id="${id}Zona" value="${esc(p ? p.zona || "" : "")}" placeholder="Almagro, CABA"></div></div>
     <div class="field"><label for="${id}Reg">Zona para proveedores</label><select id="${id}Reg">${REGIONES.map((r) => `<option ${p && p.region === r ? "selected" : ""}>${r}</option>`).join("")}</select></div>
     ${p ? `<label class="row" style="gap:8px;font-size:14px"><input type="checkbox" id="epCot" ${p.cotizacion_abierta !== false ? "checked" : ""}> Publicar los reclamos nuevos a los proveedores apenas se cargan</label>` : ""}
-    <div class="row"><button class="btn ${n ? "primary" : ""}">${n ? "Crear propiedad" : "Guardar cambios"}</button>${n ? `<button type="button" class="btn" data-act="cancelar-prop">Cancelar</button>` : ""}</div>
+    <div class="row"><button class="btn ${n ? "primary" : ""}">${n ? "Crear propiedad" : "Guardar cambios"}</button>${n ? `<button type="button" class="btn" data-act="cancelar-prop">Cancelar</button>` : `<button type="button" class="btn bad" data-act="form-elim-prop">Eliminar propiedad</button>`}</div>
+    ${!n && ui.elimProp ? `<div class="inline-form" role="alert"><b>¿Eliminar ${esc(p.nombre)}?</b><span class="q-det">Se borran todos sus reclamos, presupuestos, adjuntos y personas asociadas. Escribí el nombre para confirmar.</span>
+      <input type="text" id="elimPropNom" placeholder="${esc(p.nombre)}" aria-label="Nombre de la propiedad"><div class="row"><button type="button" class="btn sm bad" data-act="eliminar-prop">Eliminar definitivamente</button><button type="button" class="btn sm" data-act="cancelar-elim-prop">Cancelar</button></div></div>` : ""}
   </form>`;
 }
 async function cargarPersonas(prop) {
@@ -1069,6 +1329,7 @@ document.addEventListener("click", async (e) => {
   const a = t.dataset.act; if (!a) return;
   const r = S.reclamos.find((x) => x.id === ui.sel);
   const cid = t.dataset.c ? +t.dataset.c : null;
+  const rid = t.dataset.id ? +t.dataset.id : r ? r.id : null;
   switch (a) {
     case "reintentar": return arrancar();
     case "refrescar": return recargar();
@@ -1090,15 +1351,41 @@ document.addEventListener("click", async (e) => {
     case "ir-inscripcion": ui.form = "inscribirme"; return render();
     case "ir-propiedad": ui.form = "propiedad"; return render();
     case "form-pres": ui.form = "pres"; renderDetalle(); return $("#pfProv").focus();
+    case "aprobar-panel": return correr("aprobar_presupuesto", { p_presupuesto: t.dataset.p }, "Presupuesto aprobado. Avisamos al proveedor.");
     case "form-desest": ui.form = "desest"; renderDetalle(); return $("#dsMot").focus();
-    case "form-rech": ui.form = "rech:" + t.dataset.p; renderDetalle(); return $("#rcMot").focus();
+    case "form-rech": ui.form = "rech:" + t.dataset.p; render(); return $("#rcMot").focus();
     case "form-cot": ui.opForm = +t.dataset.r; renderPedidos(); return $("#ctMonto").focus();
     case "form-sumar": ui.compraForm = { id: cid, tipo: "sumar" }; renderCompras(); return $("#smCant").focus();
     case "form-ofertar": ui.compraForm = { id: cid, tipo: "ofertar" }; renderCompras(); return $("#ofP0").focus();
     case "pedir": return correr("pedir_presupuestos", { p_reclamo: r.id }, "Publicado: los proveedores del rubro ya recibieron el aviso");
     case "nota": return correr("enviar_nota", { p_reclamo: r.id }, "Nota enviada a " + r.uf);
-    case "resolver": return correr("resolver_reclamo", { p_reclamo: r.id }, "Reclamo resuelto");
-    case "reabrir": return correr("reabrir_reclamo", { p_reclamo: r.id }, "Reclamo reabierto");
+    case "resolver": return correr("resolver_reclamo", { p_reclamo: rid }, "Marcado como resuelto");
+    case "reabrir": return correr("reabrir_reclamo", { p_reclamo: rid }, "Marcado como sin resolver");
+    case "form-com": ui.form = "com"; renderDetalle(); return $("#coNota").focus();
+    case "com-off": return correr("marcar_comunicado", { p_reclamo: rid, p_comunicado: false }, "Marcado como sin comunicar");
+    case "com-on": return correr("marcar_comunicado", { p_reclamo: rid, p_comunicado: true }, "Marcado como comunicado");
+    case "form-eliminar": ui.form = "eliminar"; return renderDetalle();
+    case "confirmar-eliminar": { const ok = await correr("eliminar_reclamo", { p_reclamo: r.id }, `R-${r.id} eliminado`); if (ok) { ui.sel = null; document.body.classList.remove("detail"); render(); } return; }
+    case "ver-reclamo": ui.tab = "reclamos"; ui.sel = rid; ui.prop = "all"; ui.filtro = "todos"; ui.form = null; document.body.classList.add("detail"); render(); return window.scrollTo({ top: 0 });
+    case "limpiar-filtros": Object.keys(ui.pf).forEach((k) => (ui.pf[k] = "")); return renderPanel();
+    case "form-elim-compra": ui.compraForm = { id: cid, tipo: "eliminar" }; return renderCompras();
+    case "eliminar-compra": return correr("eliminar_compra", { p_compra: cid }, "Compra eliminada");
+    case "form-elim-prop": ui.elimProp = true; renderPersonas(); return $("#elimPropNom").focus();
+    case "cancelar-elim-prop": ui.elimProp = false; return renderPersonas();
+    case "eliminar-prop": {
+      const pr = S.props.find((x) => x.id === ui.propPers);
+      if ($("#elimPropNom").value.trim() !== pr.nombre) return toast("Escribí el nombre exacto para confirmar");
+      const ok = await correr("eliminar_propiedad", { p_propiedad: pr.id }, pr.nombre + " eliminada");
+      if (ok) { ui.elimProp = false; ui.propPers = null; render(); }
+      return;
+    }
+    case "tema": {
+      const nuevo = temaActual() === "light" ? "dark" : "light";
+      document.documentElement.dataset.theme = nuevo;
+      try { localStorage.setItem("condominios-tema", nuevo); } catch (e) {}
+      document.querySelector('meta[name="theme-color"]').content = nuevo === "light" ? "#F6F8FC" : "#0A0B0D";
+      return botonTema();
+    }
     case "aprobar": return correr("aprobar_presupuesto", { p_presupuesto: t.dataset.p }, "Presupuesto aprobado. Avisamos al proveedor.");
     case "leidos": return correr("marcar_avisos_leidos", {});
     case "salir-compra": return correr("sumarse_compra", { p_compra: cid, p_cantidad: 0 }, "Saliste de la compra");
@@ -1167,11 +1454,22 @@ document.addEventListener("submit", async (e) => {
       catch (err) { msg.textContent = err.message; }
       return;
     }
-    case "comentar": return correr("comentar", { p_reclamo: r.id, p_texto: v("cmTxt") });
+    case "comentar": return correr("comentar", { p_reclamo: r.id, p_texto: v("cmTxt"), p_interna: !!($("#cmInt") && $("#cmInt").checked) });
+    case "comunicado": return correr("marcar_comunicado", { p_reclamo: r.id, p_nota: v("coNota") || null, p_comunicado: true }, "Marcado como comunicado");
     case "desest": return correr("desestimar_reclamo", { p_reclamo: r.id, p_motivo: v("dsMot") }, "Reclamo desestimado");
     case "rech": return correr("desestimar_presupuesto", { p_presupuesto: f.dataset.p, p_motivo: v("rcMot") }, "Presupuesto desestimado");
-    case "pres": return correr("cargar_presupuesto", { p_reclamo: r.id, p_proveedor: v("pfProv"), p_monto: +v("pfMonto"), p_plazo: +v("pfPlazo") || null, p_detalle: v("pfDet") }, "Presupuesto enviado al propietario");
-    case "cotizar": return correr("cotizar", { p_reclamo: +f.dataset.r, p_monto: +v("ctMonto"), p_plazo: +v("ctPlazo") || null, p_detalle: v("ctDet") }, "Cotización enviada. Te avisamos cuando decidan.");
+    case "pres": {
+      const files = [...($("#pfFile").files || [])], rec = r.id;
+      const id = await correr("cargar_presupuesto", { p_reclamo: rec, p_proveedor: v("pfProv"), p_monto: +v("pfMonto"), p_plazo: +v("pfPlazo") || null, p_detalle: v("pfDet") }, "Presupuesto enviado al propietario");
+      if (id && id !== true && files.length) await subirArchivos(rec, files, id);
+      return;
+    }
+    case "cotizar": {
+      const files = [...($("#ctFile").files || [])], rec = +f.dataset.r;
+      const id = await correr("cotizar", { p_reclamo: rec, p_monto: +v("ctMonto"), p_plazo: +v("ctPlazo") || null, p_detalle: v("ctDet") }, "Cotización enviada. Te avisamos cuando decidan.");
+      if (id && id !== true && files.length) await subirArchivos(rec, files, id);
+      return;
+    }
     case "sumar": return correr("sumarse_compra", { p_compra: +f.dataset.c, p_cantidad: +v("smCant"), p_zona: v("smZona") || null }, "Listo, te sumaste a la compra");
     case "ofertar": {
       const escalas = [0, 1, 2].map((i) => ({ desde: +v("ofD" + i), precio: +v("ofP" + i) })).filter((x) => x.desde && x.precio).sort((a, b) => a.desde - b.desde);
@@ -1188,6 +1486,8 @@ document.addEventListener("input", (e) => { if (e.target.id === "q") { ui.q = e.
 document.addEventListener("change", (e) => {
   if (e.target.id === "propSel") { ui.prop = e.target.value; ui.sel = null; const f = filtrados(); ui.sel = f[0] ? f[0].id : null; render(); }
   if (e.target.id === "catSel") { ui.cat = e.target.value; renderLista(); }
+  if (e.target.matches("input[type=file][data-adj]")) { subirArchivos(+e.target.dataset.adj, e.target.files, e.target.dataset.pres || null); }
+  if (e.target.dataset.pf !== undefined && e.target.dataset.pf !== "") { ui.pf[e.target.dataset.pf] = e.target.value.trim(); renderPanel(); hidratarAdjuntos(); }
   if (e.target.id === "propPersSel") { ui.propPers = e.target.value; ui.nuevaProp = false; ui.ultimaCuenta = null; renderPersonas(); }
   if (e.target.id === "nrCat" || e.target.id === "nrProp") hintReclamo();
 });
@@ -1217,5 +1517,7 @@ function abrirCompra() {
   $("#ovCompra").hidden = false; $("#ncProd").focus();
 }
 
+try { const t = localStorage.getItem("condominios-tema"); if (t === "light") { document.documentElement.dataset.theme = "light"; document.querySelector('meta[name="theme-color"]').content = "#F6F8FC"; } } catch (e) {}
+botonTema();
 arrancar();
 })();
