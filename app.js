@@ -876,8 +876,17 @@ function renderRegistro() {
   </div>`;
 }
 
+function errorLogin(msg) {
+  const m = String(msg || "");
+  if (/rate limit|only request this after/i.test(m)) return "Se pidieron demasiados links en poco tiempo. Esperá un rato y probá de nuevo.";
+  if (/otp_expired|expired|invalid/i.test(m)) return "Ese link ya venció o ya se usó. Pedí uno nuevo y abrilo apenas te llegue.";
+  return "No pudimos enviar el link: " + m;
+}
 function mostrarLogin() {
   vista = "login";
+  const h = new URLSearchParams(location.hash.slice(1));
+  const errHash = h.get("error_code") || h.get("error");
+  if (errHash) history.replaceState(null, "", location.pathname + location.search);
   ["#hero", "#tabs"].forEach((s) => ($(s).hidden = true));
   renderHeader();
   $("#view").innerHTML = `<form class="card login" data-form="login">
@@ -885,7 +894,7 @@ function mostrarLogin() {
     <p class="muted" style="margin:0">Te mandamos un link a tu email para entrar, sin contraseña.</p>
     <div class="field"><label for="lgEmail">Email</label><input type="email" id="lgEmail" required placeholder="nombre@ejemplo.com" autocomplete="email"></div>
     <button class="btn primary">Enviarme el link</button>
-    <p class="muted" id="lgMsg" style="margin:0;font-size:14px"></p>
+    <p class="muted" id="lgMsg" style="margin:0;font-size:14px">${errHash ? esc(errorLogin(errHash)) : ""}</p>
   </form>`;
 }
 
@@ -956,7 +965,7 @@ document.addEventListener("submit", async (e) => {
     case "login": {
       const msg = $("#lgMsg");
       try { await Nube.login(v("lgEmail")); msg.textContent = "Listo. Revisá tu email y tocá el link para entrar."; }
-      catch (err) { msg.textContent = "No pudimos enviar el link: " + err.message; }
+      catch (err) { msg.textContent = errorLogin(err.message); }
       return;
     }
     case "invitar": {
