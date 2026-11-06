@@ -7,8 +7,14 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const URL_SB = Deno.env.get("SUPABASE_URL")!;
 const sb = createClient(URL_SB, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-const ML_ID = Deno.env.get("ML_CLIENT_ID") ?? "";
-const ML_SECRET = Deno.env.get("ML_CLIENT_SECRET") ?? "";
+// Credenciales: secretos de la función o, si no están, la tabla protegida ml_config.
+let ML_ID = Deno.env.get("ML_CLIENT_ID") ?? "";
+let ML_SECRET = Deno.env.get("ML_CLIENT_SECRET") ?? "";
+async function cargarCredenciales() {
+  if (ML_ID && ML_SECRET) return;
+  const { data } = await sb.from("ml_config").select("client_id, client_secret").eq("id", 1).maybeSingle();
+  if (data) { ML_ID = ML_ID || data.client_id || ""; ML_SECRET = ML_SECRET || data.client_secret || ""; }
+}
 const CLAVE = Deno.env.get("ML_CLAVE_ADMIN") ?? "";
 const AFILIADO = Deno.env.get("ML_AFILIADO") ?? "";
 const REDIRECT = `${URL_SB}/functions/v1/mercadolibre/callback`;
@@ -85,9 +91,10 @@ Deno.serve(async (req) => {
   const accion = url.pathname.split("/").filter(Boolean).pop();
 
   try {
+    await cargarCredenciales();
     if (accion === "conectar") {
       if (!CLAVE || url.searchParams.get("clave") !== CLAVE) return html("Clave incorrecta. Reemplazá TU_CLAVE por el valor que cargaste en ML_CLAVE_ADMIN.", 403);
-      if (!ML_ID || !ML_SECRET) return html("Faltan ML_CLIENT_ID y ML_CLIENT_SECRET en los secretos de Supabase.", 500);
+      if (!ML_ID || !ML_SECRET) return html("Faltan las credenciales de Mercado Libre (Client ID y Client Secret).", 500);
       const auth = new URL("https://auth.mercadolibre.com.ar/authorization");
       auth.search = new URLSearchParams({ response_type: "code", client_id: ML_ID, redirect_uri: REDIRECT, state: await sha(CLAVE) }).toString();
       return Response.redirect(auth.toString(), 302);

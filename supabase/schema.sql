@@ -668,3 +668,13 @@ create policy "busquedas visibles" on rubro_busquedas for select to authenticate
 create policy "productos visibles" on productos_ml    for select to authenticated using (true);
 revoke all on ml_tokens from anon, authenticated;
 -- Las búsquedas iniciales por rubro están en la migración "mercadolibre_productos" y en app.js (BUSQUEDAS).
+
+-- Credenciales de la app de Mercado Libre (alternativa a los secretos de la función)
+create table ml_config (
+  id            int primary key default 1 check (id = 1),
+  client_id     text not null,
+  client_secret text,
+  actualizado   timestamptz not null default now()
+);
+alter table ml_config enable row level security;
+revoke all on ml_config from anon, authenticated;
