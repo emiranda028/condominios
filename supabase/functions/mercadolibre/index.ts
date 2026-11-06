@@ -21,9 +21,9 @@ const CORS = {
 };
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+// Supabase sirve las respuestas de funciones como texto plano, así que los mensajes van sin HTML.
 const html = (t: string, status = 200) =>
-  new Response(`<!doctype html><meta charset="utf-8"><body style="font:16px system-ui;padding:40px;background:#0A0B0D;color:#E6E7E9"><h2>${t}</h2></body>`,
-    { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+  new Response(t + "\n", { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
 async function sha(s: string) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -59,7 +59,7 @@ async function tokenVigente(): Promise<string | null> {
   return t.access_token;
 }
 
-const slug = (q: string) => q.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, "-");
+const slug = (q: string) => q.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/\s+/g, "-");
 const conAfiliado = (link: string) => (AFILIADO ? link + (link.includes("?") ? "&" : "?") + AFILIADO : link);
 
 async function buscar(q: string, token: string | null) {
@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
 
   try {
     if (accion === "conectar") {
-      if (!CLAVE || url.searchParams.get("clave") !== CLAVE) return html("Clave incorrecta.", 403);
+      if (!CLAVE || url.searchParams.get("clave") !== CLAVE) return html("Clave incorrecta. Reemplazá TU_CLAVE por el valor que cargaste en ML_CLAVE_ADMIN.", 403);
       if (!ML_ID || !ML_SECRET) return html("Faltan ML_CLIENT_ID y ML_CLIENT_SECRET en los secretos de Supabase.", 500);
       const auth = new URL("https://auth.mercadolibre.com.ar/authorization");
       auth.search = new URLSearchParams({ response_type: "code", client_id: ML_ID, redirect_uri: REDIRECT, state: await sha(CLAVE) }).toString();
