@@ -18,6 +18,27 @@ let RUBROS = [
   ["Aire acondicionado", 1], ["Jardinería", 1], ["Mudanzas y fletes", 1], ["Limpieza", 1], ["Seguridad y accesos", 1],
   ["Espacios comunes", 1], ["Ruidos y convivencia", 0], ["Otro", 1]
 ].map(([nombre, p]) => ({ nombre, requiere: !!p }));
+const BUSQUEDAS = {
+  "Pintura": ["latex interior 20 litros", "rodillo antigota", "enduido plastico interior", "esmalte sintetico 4 litros"],
+  "Plomería": ["canilla monocomando cocina", "flexible agua mallado", "deposito inodoro mochila", "sellador roscas teflon"],
+  "Electricidad": ["lampara led e27", "termica bipolar 20a", "fotocelula", "disyuntor diferencial"],
+  "Gas": ["detector de gas", "flexible gas aprobado"],
+  "Humedad y filtraciones": ["membrana liquida 20 kg", "hidrofugo", "pintura antihumedad"],
+  "Cerrajería": ["cerradura de seguridad puerta", "cilindro cerradura", "cerradura electrica portero"],
+  "Fumigación y plagas": ["cebo cucarachas gel", "cebo hormigas", "trampa ratones"],
+  "Albañilería": ["cemento portland 50 kg", "adhesivo ceramicos 30 kg", "pastina"],
+  "Herrería": ["convertidor de oxido", "bisagra porton"],
+  "Vidriería": ["silicona transparente", "burlete ventana"],
+  "Aire acondicionado": ["limpiador aire acondicionado", "soporte aire acondicionado"],
+  "Jardinería": ["manguera 25 metros", "fertilizante cesped", "bordeadora electrica"],
+  "Mudanzas y fletes": ["cajas carton mudanza", "cinta embalar", "film stretch"],
+  "Limpieza": ["lavandina 5 litros", "desengrasante", "bolsas residuos consorcio"],
+  "Seguridad y accesos": ["camara seguridad wifi", "luz emergencia led", "matafuego 5 kg"],
+  "Espacios comunes": ["luz emergencia led", "matafuego 5 kg"]
+};
+const slugML = (q) => q.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/\s+/g, "-");
+const linkListado = (q) => "https://listado.mercadolibre.com.ar/" + slugML(q);
+const capital = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const requierePresup = (rubro) => (RUBROS.find((r) => r.nombre === rubro) || { requiere: true }).requiere;
 
 const $ = (s) => document.querySelector(s);
@@ -37,7 +58,8 @@ const sumaDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); retu
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 2800); }
 
 // ---------- Estado de la interfaz ----------
-const ui = { rolDemo: "propietario", tab: null, prop: "all", filtro: "abiertos", q: "", cat: "", sel: null, form: null, opFiltro: "abiertos", opForm: null, compraForm: null, regionCompras: "todas", busy: false };
+const ui = { rolDemo: "propietario", tab: null, prop: "all", filtro: "abiertos", q: "", cat: "", sel: null, form: null, opFiltro: "abiertos", opForm: null, compraForm: null, regionCompras: "todas", rubroProd: "Pintura", busy: false };
+const productosCache = {};
 let S = { usuario: null, props: [], roles: {}, unidades: {}, reclamos: [], proveedor: null, oportunidades: [], compras: [], avisos: [] };
 
 // ======================================================================
@@ -130,6 +152,7 @@ const Demo = {
   async iniciar() { try { this.d = JSON.parse(localStorage.getItem(this.KEY)); } catch (e) {} if (!this.d || !this.d.reclamos) this.d = seedDemo(); return true; },
   guardar() { try { localStorage.setItem(this.KEY, JSON.stringify(this.d)); } catch (e) {} },
   reset() { this.d = seedDemo(); this.guardar(); },
+  async productos(rubro) { return { rubro, conectado: false, grupos: (BUSQUEDAS[rubro] || []).map((b) => ({ busqueda: b, link: linkListado(b), items: [] })) }; },
   yo() { return DEMO_USERS[ui.rolDemo]; },
   async cargar() {
     const d = this.d, yo = this.yo(), rol = ui.rolDemo;
@@ -327,7 +350,16 @@ const Nube = {
       avisos: chk(avs).map((a) => ({ texto: a.texto, f: isoLocal(a.creado_en), leido: a.leido }))
     };
   },
-  async run(fn, args) { const { data, error } = await this.sb.rpc(fn, args); if (error) throw new Error(error.message); return data; }
+  async run(fn, args) { const { data, error } = await this.sb.rpc(fn, args); if (error) throw new Error(error.message); return data; },
+  async productos(rubro) {
+    const { data } = await this.sb.auth.getSession();
+    const r = await fetch(`${CFG.supabaseUrl}/functions/v1/mercadolibre/productos?rubro=${encodeURIComponent(rubro)}`, {
+      headers: { Authorization: "Bearer " + data.session.access_token, apikey: CFG.supabaseAnonKey }
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "No se pudieron traer los productos");
+    return j;
+  }
 };
 
 const DB = MODO_DEMO ? Demo : Nube;
@@ -379,6 +411,7 @@ function tabsDisponibles() {
   if (S.props.length) t.push({ id: "reclamos", label: "Reclamos" });
   if (S.proveedor) t.push({ id: "pedidos", label: "Pedidos para cotizar", badge: S.avisos.filter((a) => !a.leido).length });
   if (S.props.length || S.proveedor) t.push({ id: "compras", label: "Compras en conjunto" });
+  if (S.props.length) t.push({ id: "productos", label: "Productos" });
   if (S.proveedor) t.push({ id: "inscripcion", label: "Mi inscripción" });
   return t;
 }
@@ -399,7 +432,7 @@ function render() {
   if (vista === "registro") return renderRegistro();
   if (!enApp) return;
   renderHero(); renderTabs();
-  ({ reclamos: renderReclamos, pedidos: renderPedidos, compras: renderCompras, inscripcion: renderInscripcion })[ui.tab]();
+  ({ reclamos: renderReclamos, pedidos: renderPedidos, compras: renderCompras, inscripcion: renderInscripcion, productos: renderProductos })[ui.tab]();
 }
 
 function renderHeader() {
@@ -415,6 +448,7 @@ function renderHero() {
   const rol = rolPrincipal();
   const rs = S.reclamos.filter((r) => ui.prop === "all" || r.prop === ui.prop);
   if (ui.tab === "compras") sub = "Sumate a compras con vecinos de tu zona. Cuantos más se suman, más baja el precio por unidad.";
+  else if (ui.tab === "productos") sub = "Lo que más se usa en cada arreglo, con precios de Mercado Libre. Si conviene comprar en cantidad, armá una compra en conjunto.";
   else if (ui.tab === "pedidos" || ui.tab === "inscripcion") {
     const k = S.oportunidades.filter((o) => !o.mi).length;
     sub = k ? `Tenés ${plural(k, "pedido", "pedidos")} de tus rubros esperando cotización.` : "Te avisamos apenas aparezca un pedido de tus rubros en tus zonas.";
@@ -428,7 +462,7 @@ function renderHero() {
     const k = rs.filter(abierto).length;
     sub = k ? `Hay ${plural(k, "reclamo abierto", "reclamos abiertos")} en tu edificio. Contá lo que pasa y lo seguís desde acá.` : "Todo en orden en tu edificio.";
   }
-  $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(n)}</span>. ${ui.tab === "compras" ? "¿Qué compramos juntos?" : ui.tab === "pedidos" || ui.tab === "inscripcion" ? "¿Qué cotizamos hoy?" : "¿Qué resolvemos hoy?"}`;
+  $("#heroTitle").innerHTML = `Hola, <span class="name">${esc(n)}</span>. ${ui.tab === "compras" ? "¿Qué compramos juntos?" : ui.tab === "productos" ? "¿Qué te hace falta?" : ui.tab === "pedidos" || ui.tab === "inscripcion" ? "¿Qué cotizamos hoy?" : "¿Qué resolvemos hoy?"}`;
   $("#heroSub").textContent = sub;
 }
 
@@ -554,6 +588,7 @@ function renderDetalle() {
         <textarea id="pfDet" placeholder="Qué incluye y qué no" aria-label="Detalle"></textarea>
         <div class="row"><button class="btn sm primary">Enviar al propietario</button><button type="button" class="btn sm" data-act="cancelar">Cancelar</button></div></form>` : ""}
     </div></section>`}
+    ${BUSQUEDAS[r.cat] ? `<section><h3>Materiales frecuentes</h3><div class="row">${BUSQUEDAS[r.cat].slice(0, 4).map((b) => `<a class="chip" href="${linkListado(b)}" target="_blank" rel="noopener">${esc(capital(b))} ↗</a>`).join("")}<button class="linkbtn" data-act="ver-productos" data-rubro="${esc(r.cat)}">Ver precios</button></div></section>` : ""}
     <section><h3>Seguimiento</h3><ul class="timeline">
       ${r.ev.map((e) => `<li><span class="mono tl-date">${fd(e.f)}</span><span><span class="tl-who">${esc(e.q)}</span> · ${esc(e.t)}</span></li>`).join("")}
     </ul>
@@ -675,6 +710,36 @@ function cardCompra(c) {
   </article>`;
 }
 
+// ---------- Productos (Mercado Libre) ----------
+function renderProductos() {
+  const rubros = RUBROS.filter((r) => BUSQUEDAS[r.nombre]).map((r) => r.nombre);
+  if (!rubros.includes(ui.rubroProd)) ui.rubroProd = rubros[0];
+  const data = productosCache[ui.rubroProd];
+  $("#view").innerHTML = `<div class="wrap" style="gap:16px">
+    <div class="chips">${rubros.map((r) => `<button class="chip" data-rubro-prod="${esc(r)}" aria-pressed="${ui.rubroProd === r}">${esc(r)}</button>`).join("")}</div>
+    <div id="prodBody">${data ? cuerpoProductos(data) : `<div class="card empty">Buscando productos de ${esc(ui.rubroProd)}…</div>`}</div>
+  </div>`;
+  if (!data) cargarProductos(ui.rubroProd);
+}
+async function cargarProductos(rubro) {
+  try { productosCache[rubro] = await DB.productos(rubro); }
+  catch (e) { productosCache[rubro] = { rubro, conectado: false, error: e.message, grupos: (BUSQUEDAS[rubro] || []).map((b) => ({ busqueda: b, link: linkListado(b), items: [] })) }; }
+  if (ui.tab === "productos" && ui.rubroProd === rubro && $("#prodBody")) $("#prodBody").innerHTML = cuerpoProductos(productosCache[rubro]);
+}
+function cuerpoProductos(d) {
+  const aviso = d.conectado ? "" : `<div class="card" style="padding:14px 18px;font-size:14px" ><span class="muted">${d.error ? esc(d.error) + ". " : ""}Los precios en vivo aparecen cuando Mercado Libre esté conectado. Mientras tanto, cada búsqueda abre Mercado Libre.</span></div>`;
+  return `<div class="wrap" style="gap:14px">${aviso}${d.grupos.map((g) => `<section class="card op">
+    <div class="row" style="justify-content:space-between"><h4>${esc(capital(g.busqueda))}</h4>
+      <span class="row"><a class="btn sm" href="${esc(g.link)}" target="_blank" rel="noopener">Ver todos ↗</a><button class="btn sm tonal" data-act="compra-producto" data-busqueda="${esc(g.busqueda)}">Comprar en conjunto</button></span></div>
+    ${g.items.length ? `<div class="prod-grid">${g.items.map((it) => `<a class="prod" href="${esc(it.link)}" target="_blank" rel="noopener">
+        ${it.imagen ? `<img src="${esc(it.imagen)}" alt="" loading="lazy">` : `<span class="prod-img"></span>`}
+        <span class="prod-tit">${esc(it.titulo)}</span>
+        <span class="prod-precio">${it.moneda === "USD" ? "US$ " + num(it.precio) : ars(it.precio)}</span>
+        <span class="row" style="gap:6px">${it.envio_gratis ? `<span class="save">Envío gratis</span>` : ""}${it.tienda_oficial ? `<span class="zona">Tienda oficial</span>` : ""}</span>
+      </a>`).join("")}</div>` : ""}
+  </section>`).join("")}</div>`;
+}
+
 // ---------- Inscripción de proveedores ----------
 function formInscripcion(p) {
   p = p || { razon: "", tel: "", rubros: [], zonas: ["CABA"], cuit: "", matricula: "", descripcion: "" };
@@ -728,6 +793,7 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.f) { ui.filtro = t.dataset.f; renderLista(); return; }
   if (t.dataset.opf) { ui.opFiltro = t.dataset.opf; ui.opForm = null; renderPedidos(); return; }
   if (t.dataset.reg) { ui.regionCompras = t.dataset.reg; renderCompras(); return; }
+  if (t.dataset.rubroProd) { ui.rubroProd = t.dataset.rubroProd; renderProductos(); return; }
   if (t.dataset.sel) { ui.sel = +t.dataset.sel; ui.form = null; document.body.classList.add("detail"); renderLista(); renderDetalle(); if (matchMedia("(max-width:900px)").matches) window.scrollTo({ top: 0 }); return; }
   const a = t.dataset.act; if (!a) return;
   const r = S.reclamos.find((x) => x.id === ui.sel);
@@ -740,6 +806,8 @@ document.addEventListener("click", async (e) => {
     case "cancelar": ui.form = ui.opForm = ui.compraForm = null; return render();
     case "nuevo-reclamo": return abrirReclamo();
     case "nueva-compra": return abrirCompra();
+    case "ver-productos": ui.tab = "productos"; ui.rubroProd = t.dataset.rubro; document.body.classList.remove("detail"); render(); return window.scrollTo({ top: 0 });
+    case "compra-producto": abrirCompra(); $("#ncCat").value = ui.rubroProd; $("#ncProd").value = capital(t.dataset.busqueda); $("#ncUni").focus(); return;
     case "ir-inscripcion": ui.form = "inscribirme"; return render();
     case "form-pres": ui.form = "pres"; renderDetalle(); return $("#pfProv").focus();
     case "form-desest": ui.form = "desest"; renderDetalle(); return $("#dsMot").focus();

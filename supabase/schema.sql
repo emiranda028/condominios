@@ -637,3 +637,34 @@ grant execute on function
 to authenticated;
 
 revoke execute on function _log(bigint, text), _exigir(bigint, rol_usuario[]), _avisar_proveedores(bigint), crear_perfil() from authenticated;
+
+-- ============================================================
+-- Mercado Libre: productos más usados por rubro
+-- (la función supabase/functions/mercadolibre consulta la API y llena la caché)
+-- ============================================================
+create table rubro_busquedas (
+  rubro    text not null references rubros(nombre) on delete cascade,
+  busqueda text not null,
+  orden    int not null default 0,
+  primary key (rubro, busqueda)
+);
+create table productos_ml (
+  busqueda    text primary key,
+  items       jsonb not null default '[]',
+  actualizado timestamptz not null default now()
+);
+create table ml_tokens (
+  id            int primary key default 1 check (id = 1),
+  ml_user_id    bigint,
+  access_token  text not null,
+  refresh_token text not null,
+  expira        timestamptz not null,
+  actualizado   timestamptz not null default now()
+);
+alter table rubro_busquedas enable row level security;
+alter table productos_ml    enable row level security;
+alter table ml_tokens       enable row level security;
+create policy "busquedas visibles" on rubro_busquedas for select to authenticated using (true);
+create policy "productos visibles" on productos_ml    for select to authenticated using (true);
+revoke all on ml_tokens from anon, authenticated;
+-- Las búsquedas iniciales por rubro están en la migración "mercadolibre_productos" y en app.js (BUSQUEDAS).
